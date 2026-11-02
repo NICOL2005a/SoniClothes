@@ -35,9 +35,9 @@ En este equipo las dependencias se enlazan con las del proyecto original. En otr
 
 ## Registro y acceso
 
-- **Cliente:** solo datos básicos (nombre, correo, usuario y contraseña). Se crea una cuenta y un registro de cliente vinculado. Entra de inmediato a la tienda, sin aprobación ni documentación. Al vender en tienda, el administrador debe seleccionar ese cliente para que la venta aparezca en su historial. Puede explorar el catálogo, elegir talla y color, guardar su carrito y hacer una compra con pago de tarjeta simulado. No hay cobros bancarios reales.
-- **Proveedor:** solicita acceso con su nombre comercial. El administrador recibe la solicitud en **Solicitudes de acceso** y puede aprobar o rechazar. Al aprobar se crea un proveedor o se vincula uno existente que el administrador seleccione. Solo ve los productos y cuestionarios del proveedor vinculado.
-- **Administrador:** solicita acceso desde el mismo formulario y espera aprobación de otro administrador. La cuenta inicial se crea desde la terminal como se explica arriba. Conserva las pantallas del POS y gestiona solicitudes.
+- **Cliente:** solo datos básicos (nombre, correo, usuario y contraseña). Se crea una cuenta y un registro de cliente vinculado. Entra de inmediato a la tienda, sin aprobación ni documentación. Puede explorar el catálogo, elegir talla y color, guardar su carrito y hacer una compra con pago de tarjeta simulado. No hay cobros bancarios reales.
+- **Proveedor:** solicita acceso con su nombre comercial. El administrador recibe la solicitud en **Solicitudes de acceso** y puede aprobar o rechazar. Al aprobar se crea un proveedor o se vincula uno existente que el administrador seleccione. Desde **Agregar prendas**, envía el cuestionario con sus artículos. Las prendas quedan pendientes y puede adjuntar fotos desde **Mi negocio**.
+- **Administrador:** las cuentas administrativas se crean desde la terminal. **Punto de venta** muestra el directorio, **Solicitudes** permite revisar accesos de proveedores y **Revisar prendas** permite publicar o rechazar propuestas. **Ingresos** muestra el importe bruto por compra y proveedor.
 
 Las solicitudes se consultan al abrir la bandeja o al pulsar **Actualizar solicitudes**. No se envían correos, SMS ni avisos externos. Tras aprobar, la persona puede entrar con la contraseña elegida; comunícale tu decisión por el medio habitual.
 
@@ -85,8 +85,10 @@ El cliente entra al catálogo después de iniciar sesión o registrarse. Puede f
 
 La pantalla de pago muestra una tarjeta ficticia, de solo lectura, y permite probar **Pago aprobado** o **Tarjeta rechazada**. El navegador envía únicamente el escenario y una clave aleatoria de operación; no envía números de tarjeta, nombres bancarios, CVC ni vencimiento. El servidor rechaza datos adicionales en ese formulario de prueba.
 
-Al aprobar, el servidor vuelve a comprobar precios y stock, registra venta, detalles, pago, folio interno SIM- y la marca de simulación, y vacía el carrito en una sola transacción. La compra aparece en el historial del cliente y en Ventas del administrador con etiqueta de simulación. Los pagos simulados descuentan existencias locales, pero no generan ningún cargo real. Si el pago se rechaza o no hay stock, no se guarda una venta parcial y el carrito se conserva. Las claves de operación impiden duplicar la compra al reenviar la misma solicitud.
+Al aprobar, el servidor vuelve a comprobar precios y stock, registra venta, detalles, pago, folio interno SIM- y la marca de simulación, y vacía el carrito en una sola transacción. La compra aparece en el historial del cliente y en Ingresos del administrador con etiqueta de simulación. Los pagos simulados descuentan existencias locales, pero no generan ningún cargo real. Si el pago se rechaza o no hay stock, no se guarda una venta parcial y el carrito se conserva. Las claves de operación impiden duplicar la compra al reenviar la misma solicitud.
 
 La entrega se presenta como recogida en tienda. No se implementan envíos, compras bancarias reales ni facturación fiscal. Las ilustraciones de las prendas son SVG de referencia, no fotografías de productos.
 
 La nueva migración se aplica automáticamente al iniciar. Usa `npm run demo` para probar en la base separada de demostración o `npm start` para utilizar la copia local de tu base. Reinicia el servidor tras actualizar los archivos JavaScript del servidor.
+
+La migración `08_revision.sql` incorpora la revisión de prendas y guarda el proveedor atribuido en cada detalle de compra nueva. Los importes son brutos. Las compras históricas sin proveedor guardado y las prendas con varios proveedores quedan como **Sin atribución**.

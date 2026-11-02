@@ -6,3 +6,5 @@
 .app-topbar .app-breadcrumb strong{font-size:11px;font-weight:550;margin:0}
 button.secondary{background:white;color:var(--olive);border-color:#ced2c4}
 button.secondary:hover{background:#eeefe8;color:var(--olive)}
+.revision-foto{width:160px;height:140px;object-fit:contain;background:var(--soft);border-radius:6px;margin-bottom:16px}
+.revision-actions{display:flex;flex-wrap:wrap;gap:10px}

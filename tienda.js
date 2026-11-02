@@ -6,7 +6,10 @@ async function cart(db,user){
  return {items,total:totalCentavos/100,unidades:items.reduce((s,p)=>s+p.cantidad,0)};
 }
 function instalar(app,db,ruta){
- ruta('get','/api/portal/cliente/catalogo',async(req,res)=>res.json((await db.query('SELECT id_producto,id_variante,producto,marca,descripcion,precio_venta,categoria,talla,color,COALESCE(existencia,0) AS existencia FROM vista_catalogo_prendas ORDER BY id_producto,id_variante')).rows));
+ ruta('get','/api/portal/cliente/catalogo',async(req,res)=>res.json((await db.query(`SELECT id_producto,id_variante,producto,marca,descripcion,precio_venta,categoria,talla,color,COALESCE(existencia,0) AS existencia,
+ (SELECT string_agg(DISTINCT pr.nombre, ', ' ORDER BY pr.nombre) FROM proveedor_producto pp JOIN proveedor pr USING(id_proveedor) WHERE pp.id_producto=v.id_producto) AS proveedores,
+ (SELECT '/fotos/'||f.id_proveedor||'/'||f.id_producto FROM foto_prenda f WHERE f.id_producto=v.id_producto ORDER BY f.id_proveedor LIMIT 1) AS foto
+ FROM vista_catalogo_prendas v ORDER BY id_producto,id_variante`)).rows));
  ruta('get','/api/portal/cliente/carrito',async(req,res)=>res.json(await cart(db,req.usuario.id_usuario)));
  ruta('post','/api/portal/cliente/carrito',async(req,res)=>{
   const {id_variante,cantidad}=req.body||{};
@@ -46,7 +49,7 @@ function instalar(app,db,ruta){
    for(const item of [...c.items].sort((a,b)=>Number(a.id_variante)-Number(b.id_variante))){
     const updated=await db.query('UPDATE inventario SET existencia=existencia-$1 WHERE id_variante=$2 AND existencia>=$1 RETURNING existencia',[item.cantidad,item.id_variante]);
     if(!updated.rows.length)throw fail('Cambió la disponibilidad. Revisa las tallas y cantidades de tu carrito.',409);
-    await db.query('INSERT INTO detalle_venta(id_venta,id_variante,cantidad,precio_unitario) VALUES($1,$2,$3,$4)',[venta.id_venta,item.id_variante,item.cantidad,item.precio_venta]);
+    await db.query('INSERT INTO detalle_venta(id_venta,id_variante,cantidad,precio_unitario,proveedor_atribuido) VALUES($1,$2,$3,$4,(SELECT CASE WHEN COUNT(*)=1 THEN MIN(id_proveedor) END FROM proveedor_producto WHERE id_producto=$5))',[venta.id_venta,item.id_variante,item.cantidad,item.precio_venta,item.id_producto]);
    }
    const metodo=(await db.query("SELECT id_metodo_pago FROM metodo_pago WHERE nombre='Tarjeta simulada'")).rows[0];
    await db.query('INSERT INTO pago(id_venta,id_metodo_pago,monto) VALUES($1,$2,$3)',[venta.id_venta,metodo.id_metodo_pago,c.total]);

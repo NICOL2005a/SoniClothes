@@ -2,7 +2,7 @@
 window.soniReady=(async()=>{
  const response=await fetch('/api/sesion');if(!response.ok){location.assign('/login.html');return;}
  const me=await response.json();
- const paths={administrador:[['ventas.html','Punto de venta','sales'],['catalogo.html','Inventario','box'],['proveedores.html','Proveedores','truck'],['solicitudes.html','Solicitudes','users']],cliente:[['tienda.html','Explorar prendas','bag'],['carrito.html','Mi carrito','cart'],['cliente.html','Mis compras','sales']],proveedor:[['proveedor.html','Mi negocio','box']]};
+ const paths={administrador:[['ventas.html','Punto de venta','sales'],['revision.html','Revisar prendas','box'],['ingresos.html','Ingresos','sales'],['solicitudes.html','Solicitudes','users']],cliente:[['tienda.html','Explorar prendas','bag'],['carrito.html','Mi carrito','cart'],['cliente.html','Mis compras','sales']],proveedor:[['proveedor.html','Mi negocio','box'],['proveedores.html','Agregar prendas','truck']]};
  const icons={sales:'M4 3h16v18l-4-2-4 2-4-2-4 2V3Zm4 5h8M8 12h8',box:'m12 3 9 5v9l-9 5-9-5V8l9-5Zm0 9 9-4M3 8l9 4v10',truck:'M3 5h11v12H3V5Zm11 5h4l3 4v3h-7M7 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4m11 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4',users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8m8 0a4 4 0 0 1 0 8m5 10v-2a4 4 0 0 0-3-3.87',bag:'M5 8h14l1 13H4L5 8Zm4 0V6a3 3 0 0 1 6 0v2',cart:'M2 3h3l3 12h11l3-9H6m3 13h.01M18 19h.01'};
  const nav=paths[me.rol]||[];const current=location.pathname.split('/').pop();
  function icon(key){return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[key]}"/></svg>`;}

@@ -20,7 +20,9 @@ function renderProducts(){
  $('products').replaceChildren();$('product-count').textContent=`${groups.length} prendas`;
  if(!groups.length){$('products').append(node('div','No encontramos prendas con estos filtros. Prueba otra búsqueda.','shop-empty'));return;}
  groups.forEach(variants=>{
-  const first=variants[0],card=node('article',undefined,'product-card-shop'),image=node('div',undefined,'product-image'),art=garment(first.producto,first.color);image.append(art,node('span',first.categoria,'status-chip'));
+  const first=variants[0],card=node('article',undefined,'product-card-shop'),image=node('div',undefined,'product-image'),art=first.foto?node('img'):garment(first.producto,first.color);
+  if(first.foto){art.alt='Foto de '+first.producto;art.loading='lazy';art.src=first.foto;art.onerror=()=>art.replaceWith(garment(first.producto,tones.value));}
+  image.append(art,node('span',first.categoria,'status-chip'));
   const heading=node('div',undefined,'product-heading');heading.append(node('h3',first.producto),node('strong',money(first.precio_venta)));
   const fields=node('div',undefined,'variant-fields'),sizes=node('select'),tones=node('select');sizes.setAttribute('aria-label','Talla de '+first.producto);tones.setAttribute('aria-label','Color de '+first.producto);
   for(const size of [...new Set(variants.map(v=>v.talla))]){const o=node('option',size);o.value=size;sizes.append(o);}
@@ -28,10 +30,10 @@ function renderProducts(){
   const a=node('label','Talla'),b=node('label','Color');a.append(sizes);b.append(tones);fields.append(a,b);
   const add=node('button','Agregar al carrito +','product-add'),stock=node('p',undefined,'availability');add.type='button';
   function current(){return variants.find(v=>v.talla===sizes.value&&v.color===tones.value);}
-  function update(){const v=current();add.disabled=!v||Number(v.existencia)<=0;add.textContent=add.disabled?'Sin stock':'Agregar al carrito +';stock.textContent=v&&v.existencia>0?(v.existencia<=3?'Últimas unidades':'Disponible en esta talla y color'):'Esta combinación no está disponible';image.querySelector('svg').replaceWith(garment(first.producto,tones.value));}
+  function update(){const v=current();add.disabled=!v||Number(v.existencia)<=0;add.textContent=add.disabled?'Sin stock':'Agregar al carrito +';stock.textContent=v&&v.existencia>0?(v.existencia<=3?'Últimas unidades':'Disponible en esta talla y color'):'Esta combinación no está disponible';image.querySelector('svg')?.replaceWith(garment(first.producto,tones.value));}
   sizes.onchange=tones.onchange=update;
   add.onclick=async()=>{const v=current();if(!v||busy)return;const item=cart.items.find(i=>String(i.id_variante)===String(v.id_variante));add.disabled=true;const ok=await changeVariant(v.id_variante,(item?.cantidad||0)+1);if(ok)notice(`${first.producto} · ${v.talla} · ${v.color} se agregó a tu carrito.`);update();};
-  card.append(image,heading,node('p',first.marca||'SoniClothes','product-category'),fields,add,stock);$('products').append(card);update();
+  card.append(image,heading,node('p',first.marca||'SoniClothes','product-category'),node('p','Proveedor: '+(first.proveedores||'Sin proveedor registrado'),'product-category'),fields,add,stock);$('products').append(card);update();
  });
 }
 function renderCart(){

@@ -89,12 +89,19 @@ app.use((req,res,next)=>{
  const rol=req.usuario.rol;
  const portal=rol==='cliente'?'/cliente.html':'/proveedor.html';
  if(rol==='administrador') {
-  if(req.path.startsWith('/api/portal/'))return res.status(403).json({error:'Esta sección corresponde a otra cuenta.'});
+  const lectura=['/api/directorio','/api/ingresos','/api/revision','/api/solicitudes','/api/proveedores'];
+  const permitido=req.method==='GET'&&lectura.includes(req.path) ||
+    req.method==='POST'&&/^\/api\/(revision\/\d+|solicitudes\/\d+\/decision)$/.test(req.path);
+  if(req.path.startsWith('/api/')&&!permitido)return res.status(403).json({error:'Esta operación no corresponde a Administración.'});
+  if(['/proveedores.html','/catalogo.html','/tienda.html','/carrito.html','/pago.html','/cliente.html','/proveedor.html'].includes(req.path))return res.redirect('/ventas.html');
   return next();
  }
+ if(rol==='proveedor' && ((req.method==='GET'&&['/proveedores.html','/supplier.css'].includes(req.path)) ||
+  (req.method==='POST'&&req.path==='/api/cuestionarios')))return next();
  const assets=['/portal.css','/portal.js','/app.css','/app-shell.js','/tienda.css','/tienda.js'];
  const api=rol==='cliente'?/^\/api\/portal\/cliente(?:\/ventas\/\d+|\/catalogo|\/carrito|\/checkout)?$/:/^\/api\/portal\/proveedor$/;
  const paginasCliente=['/tienda.html','/carrito.html','/pago.html'];
+ if((req.method==='GET' && /^\/fotos\/\d+\/\d+$/.test(req.path))||(rol==='proveedor' && req.method==='PUT' && /^\/api\/portal\/proveedor\/foto\/\d+$/.test(req.path)))return next();
  if(req.path===portal||assets.includes(req.path)||(rol==='cliente'&&paginasCliente.includes(req.path))||api.test(req.path))return next();
  if(req.path.startsWith('/api/'))return res.status(403).json({error:'Tu cuenta no tiene acceso a esta sección.'});
  return res.redirect(destinos[rol]);
@@ -117,71 +124,17 @@ app.get('/api/portal/cliente/ventas/:id',async(req,res,next)=>{
 app.get('/api/portal/proveedor',async(req,res,next)=>{
  try {res.json(await db.exclusive(async()=>({
   proveedor:(await db.query('SELECT nombre,telefono,correo FROM proveedor WHERE id_proveedor=$1',[req.usuario.id_proveedor])).rows[0],
-  productos:(await db.query('SELECT p.nombre,p.marca,c.nombre AS categoria FROM proveedor_producto pp JOIN producto p USING(id_producto) JOIN categoria c USING(id_categoria) WHERE pp.id_proveedor=$1 ORDER BY p.nombre',[req.usuario.id_proveedor])).rows,
+  productos:(await db.query(`SELECT p.id_producto,p.nombre,p.marca,c.nombre AS categoria, COALESCE(r.estado,'publicada') AS estado, CASE WHEN f.id_producto IS NOT NULL THEN '/fotos/'||pp.id_proveedor||'/'||p.id_producto END AS foto FROM proveedor_producto pp JOIN producto p USING(id_producto) JOIN categoria c USING(id_categoria) LEFT JOIN propuesta_prenda r ON r.id_producto=p.id_producto LEFT JOIN foto_prenda f ON f.id_producto=p.id_producto AND f.id_proveedor=pp.id_proveedor WHERE pp.id_proveedor=$1 ORDER BY p.nombre`,[req.usuario.id_proveedor])).rows,
   cuestionarios:(await db.query('SELECT id_cuestionario,fecha FROM cuestionario_proveedor WHERE id_proveedor=$1 ORDER BY fecha DESC',[req.usuario.id_proveedor])).rows
  })));}catch(e){next(e);}
 });
-const error400 = message => Object.assign(new Error(message),{status:400});
 const ruta = (method,url,fn) => app[method](url,async(req,res,next)=>{
   try { await db.exclusive(()=>fn(req,res)); } catch(e) { next(e); }
 });
 require('./registro').instalarAdministracion(app,db,ruta);
+require('./fotos').instalar(app,db,express);
 require('./tienda').instalar(app,db,ruta);
-ruta('get','/api/catalogo',async(req,res)=>res.json((await db.query('SELECT * FROM vista_catalogo_prendas ORDER BY id_variante')).rows));
-ruta('get','/api/opciones',async(req,res)=>res.json({
-  clientes:(await db.query('SELECT * FROM cliente ORDER BY nombre')).rows,
-  metodos:(await db.query("SELECT * FROM metodo_pago WHERE nombre <> 'Tarjeta simulada' ORDER BY id_metodo_pago")).rows
-}));
-ruta('get','/api/ventas',async(req,res)=>res.json((await db.query(`SELECT v.*,c.nombre AS cliente,f.folio,(s.id_venta IS NOT NULL) AS simulada FROM vista_venta_total v LEFT JOIN cliente c USING(id_cliente) LEFT JOIN factura f USING(id_venta) LEFT JOIN venta_simulada s USING(id_venta) ORDER BY v.id_venta DESC LIMIT 50`)).rows));
-ruta('get','/api/ventas/:id',async(req,res)=>{
-  if (!/^\d+$/.test(req.params.id)) throw error400('Folio inválido.');
-  const venta=(await db.query(`SELECT v.*,f.folio,c.nombre AS cliente,(s.id_venta IS NOT NULL) AS simulada FROM vista_venta_total v LEFT JOIN factura f USING(id_venta) LEFT JOIN cliente c USING(id_cliente) LEFT JOIN venta_simulada s USING(id_venta) WHERE v.id_venta=$1`,[req.params.id])).rows[0];
-  if (!venta) return res.status(404).json({error:'Venta no encontrada.'});
-  venta.detalles=(await db.query(`SELECT d.*,p.nombre,v.talla,v.color FROM detalle_venta d JOIN variante_producto v USING(id_variante) JOIN producto p USING(id_producto) WHERE id_venta=$1`,[req.params.id])).rows;
-  res.json(venta);
-});
-ruta('post','/api/ventas',async(req,res)=>{
-  const b=req.body;
-  if (!b || !Array.isArray(b.items) || b.items.length===0 || b.items.length>100) throw error400('Agrega de 1 a 100 variantes.');
-  if (!/^\d+$/.test(String(b.id_metodo_pago))) throw error400('Selecciona un método de pago.');
-  const ids=new Set();
-  for(const item of b.items) {
-    if (!/^\d+$/.test(String(item.id_variante)) || !Number.isSafeInteger(item.cantidad) || item.cantidad<1 || item.cantidad>10000 || ids.has(String(item.id_variante))) throw error400('Revisa las cantidades y evita variantes repetidas.');
-    ids.add(String(item.id_variante));
-  }
-  await db.query('BEGIN');
-  try {
-    if (!(await db.query("SELECT 1 FROM metodo_pago WHERE id_metodo_pago=$1 AND nombre <> 'Tarjeta simulada'",[b.id_metodo_pago])).rows.length) throw error400('Método de pago inválido.');
-    if (b.id_cliente && (!/^\d+$/.test(String(b.id_cliente)) || !(await db.query('SELECT 1 FROM cliente WHERE id_cliente=$1',[b.id_cliente])).rows.length)) throw error400('Cliente inválido.');
-    const usuario=req.usuario;
-    const v=(await db.query('INSERT INTO venta(id_cliente,id_usuario) VALUES($1,$2) RETURNING id_venta',[b.id_cliente||null,usuario.id_usuario])).rows[0];
-    let total=0;
-    // Orden estable para evitar bloqueos cruzados al vender varias variantes.
-    for(const item of [...b.items].sort((a,b)=>Number(a.id_variante)-Number(b.id_variante))) {
-      const stock=await db.query('UPDATE inventario SET existencia=existencia-$1 WHERE id_variante=$2 AND existencia >= $1 RETURNING existencia',[item.cantidad,item.id_variante]);
-      if (!stock.rows.length) throw error400('Una prenda no tiene existencias suficientes. Actualiza el catálogo.');
-      const p=(await db.query('SELECT p.precio_venta FROM variante_producto v JOIN producto p USING(id_producto) WHERE id_variante=$1',[item.id_variante])).rows[0];
-      await db.query('INSERT INTO detalle_venta(id_venta,id_variante,cantidad,precio_unitario) VALUES($1,$2,$3,$4)',[v.id_venta,item.id_variante,item.cantidad,p.precio_venta]);
-      total+=Math.round(Number(p.precio_venta)*100)*item.cantidad;
-    }
-    await db.query('INSERT INTO pago(id_venta,id_metodo_pago,monto) VALUES($1,$2,$3)',[v.id_venta,b.id_metodo_pago,total/100]);
-    const folio=`V-${String(v.id_venta).padStart(6,'0')}`;
-    await db.query('INSERT INTO factura(id_venta,folio) VALUES($1,$2)',[v.id_venta,folio]);
-    await db.query('COMMIT');
-    res.status(201).json({id_venta:v.id_venta,folio,total:total/100});
-  } catch(e) { await db.query('ROLLBACK'); throw e; }
-});
-ruta('post','/api/cuestionarios',async(req,res)=>{
-  const b=req.body;
-  if(!b || typeof b.nombre_comercial!=='string' || !b.nombre_comercial.trim() || b.nombre_comercial.length>120 || typeof b.telefono!=='string' || b.telefono.length>25 || typeof b.correo!=='string' || b.correo.length>190 || !Array.isArray(b.productos) || !b.productos.length || b.productos.length>100) throw error400('Revisa los datos del proveedor.');
-  for(const p of b.productos) if(!p || typeof p.nombre!=='string' || !p.nombre.trim() || !Number.isFinite(Number(p.precio_unitario)) || Number(p.precio_unitario)<0) throw error400('Revisa los nombres y precios de los productos.');
-  await db.query('BEGIN');
-  try {
-    const proveedor=(await db.query('INSERT INTO proveedor(nombre,telefono,correo) VALUES($1,$2,$3) RETURNING id_proveedor',[b.nombre_comercial.trim(),b.telefono,b.correo])).rows[0];
-    const q=(await db.query('INSERT INTO cuestionario_proveedor(id_proveedor,respuestas) VALUES($1,$2::jsonb) RETURNING id_cuestionario',[proveedor.id_proveedor,JSON.stringify(b)])).rows[0];
-    await db.query('COMMIT');res.status(201).json(q);
-  }catch(e){await db.query('ROLLBACK');throw e;}
-});
+require('./revision').instalar(db,ruta);
 ruta('get','/api/proveedores',async(req,res)=>res.json((await db.query('SELECT p.*,q.id_cuestionario,q.fecha FROM proveedor p LEFT JOIN cuestionario_proveedor q USING(id_proveedor) ORDER BY p.id_proveedor DESC')).rows));
 app.use((e,req,res,next)=>{ console.error(e.message);res.status(e.status||500).json({error:e.status?e.message:'No se pudo completar la operación.'}); });
 db.iniciar().then(async()=>{

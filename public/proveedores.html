@@ -22,9 +22,9 @@
         
 
         <div class="page-heading">
-            <span class="eyebrow">NUESTRAS ALIANZAS</span><h1>Proveedores</h1>
+            <span class="eyebrow">NUESTRAS ALIANZAS</span><h1>Agregar prendas</h1>
             <p>
-                Registra la información de tu empresa y los productos de ropa que ofreces.
+                Envía tus prendas a revisión. Puedes adjuntar su foto desde Mi negocio.
                 Los datos permitirán evaluar tu catálogo para su posible incorporación al punto de venta.
             </p>
         </div>
@@ -439,7 +439,7 @@
                     </button>
 
                     <button type="submit" class="btn-primary-custom">
-                        Enviar cuestionario
+                        Enviar a revisión
                         <i class="bi bi-arrow-right ms-2"></i>
                     </button>
                 </div>
@@ -452,7 +452,7 @@
             SoniClothes · Sistema de gestión de punto de venta y proveedores
         </footer>
 
-    <section class="panel"><h2>Proveedores registrados</h2><div id="proveedores-guardados"></div><button type="button" onclick="cargarProveedores()">Actualizar lista</button></section></main>
+    </main>
 
 <!-- PLANTILLA DE PRODUCTO -->
 <template id="product-template">
@@ -657,7 +657,7 @@
             <div class="row">
 
                 <div class="col-md-6 field-group">
-                    <label class="field-label">Precio unitario (MXN) <span class="required">*</span></label>
+                    <label class="field-label">Precio de venta al cliente (MXN) <span class="required">*</span></label>
                     <input
                         type="number"
                         min="0.01"
@@ -692,7 +692,7 @@
                 </div>
 
                 <div class="col-md-6 field-group">
-                    <label class="field-label">Existencias disponibles (piezas) <span class="required">*</span></label>
+                    <label class="field-label">Existencias totales entre todas las tallas y colores (piezas) <span class="required">*</span></label>
                     <input
                         type="number"
                         min="0"
@@ -1005,7 +1005,7 @@
             const resultado = await respuesta.json();
             if (!respuesta.ok) throw new Error(resultado.error || 'No se pudo guardar.');
             showMessage(`¡Cuestionario guardado! Folio: ${resultado.id_cuestionario}.`, 'success');
-            cargarProveedores();
+            window.location.assign("/proveedor.html");
         } catch (error) {
             showMessage(`No se pudo guardar: ${error.message}`, 'error');
         } finally {
@@ -1025,5 +1025,5 @@
 <script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
 
 <script>
-async function cargarProveedores(){const cont=document.getElementById('proveedores-guardados');try{const r=await fetch('/api/proveedores');if(!r.ok)throw Error();const datos=await r.json();cont.replaceChildren();datos.forEach(p=>{const fila=document.createElement('p');fila.textContent=p.nombre+' · '+(p.correo||'Sin correo')+' · '+(p.id_cuestionario?'Cuestionario #'+p.id_cuestionario:'Datos de demostración');cont.appendChild(fila);});}catch(e){cont.textContent='No se pudo cargar la lista.';}}cargarProveedores();</script><div class="legacy-logout"><button type="button" class="btn btn-outline-danger" id="salir">Cerrar sesión</button></div><script>document.getElementById('salir').onclick=async()=>{try{const r=await fetch('/api/logout',{method:'POST'});if(r.ok)location.href='/login.html';else alert('No se pudo cerrar sesión.');}catch(e){alert('No se pudo cerrar sesión.');}};</script></body>
+</script><div class="legacy-logout"><button type="button" class="btn btn-outline-danger" id="salir">Cerrar sesión</button></div><script>document.getElementById('salir').onclick=async()=>{try{const r=await fetch('/api/logout',{method:'POST'});if(r.ok)location.href='/login.html';else alert('No se pudo cerrar sesión.');}catch(e){alert('No se pudo cerrar sesión.');}};</script></body>
 </html>

@@ -6,6 +6,8 @@ const form=$('#auth-form'),message=$('#message');
 function notice(text,error=false){message.textContent=text;message.classList.toggle('error',error);message.hidden=false;message.setAttribute('role',error?'alert':'status');}
 function stored(key){try{return localStorage.getItem(key)||'';}catch{return '';}}
 function update(){
+ if(role==='administrador')mode='login';
+ $('.mode-switch').hidden=role==='administrador';
  document.body.classList.toggle('signup',mode==='signup');
  $('#rol').value=role;
  document.querySelectorAll('[data-role]').forEach(b=>{const active=b.dataset.role===role;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
@@ -22,7 +24,7 @@ function update(){
  $('#contrasena').autocomplete=mode==='signup'?'new-password':'current-password';$('#contrasena').minLength=mode==='signup'?12:1;$('#contrasena').maxLength=mode==='signup'?128:255;
  const pending=mode==='signup'&&role!=='cliente';
  $('#approval-note').hidden=!pending;
- $('#approval-note').textContent=role==='proveedor'?'Tu solicitud llegará al panel de administración. Podrás entrar cuando SoniClothes la apruebe.':'El acceso administrativo requiere aprobación de un administrador existente.';
+ $('#approval-note').textContent=role==='proveedor'?'Tu solicitud llegará al panel de administración. Podrás entrar cuando SoniClothes la apruebe.':'';
  $('#submit-button span').textContent=mode==='login'?'Entrar a mi cuenta':pending?'Enviar solicitud':'Crear cuenta y entrar';
  $('#mode-prompt').textContent=mode==='login'?'¿Aún no tienes cuenta?':'¿Ya tienes una cuenta?';$('#mode-button').textContent=mode==='login'?'Crear cuenta':'Iniciar sesión';
  $('#confirmacion').setCustomValidity('');

@@ -2,6 +2,7 @@ const {hashPassword,roles}=require('./acceso');
 function instalar(app,db,limited){
  app.post('/api/registro',limited,async(req,res,next)=>{
   const b=req.body||{};
+  if(b.rol==='administrador')return res.status(403).json({error:'Las cuentas administrativas se crean desde la terminal.'});
   const nombre=String(b.nombre||'').trim(),usuario=String(b.usuario||'').trim(),correo=String(b.correo||'').trim().toLowerCase();
   if(!roles.includes(b.rol)||!nombre||nombre.length>120||!(/^[a-zA-Z0-9._-]{3,60}$/).test(usuario)||!(/^[^\s@]+@[^\s@]+\.[^\s@]+$/).test(correo)||correo.length>190||typeof b.contrasena!=='string'||b.contrasena.length<12||b.contrasena.length>128||typeof b.confirmacion!=='string'||b.confirmacion!==b.contrasena)
    return res.status(400).json({error:'Revisa los datos. La contraseña debe tener de 12 a 128 caracteres y coincidir con su confirmación.'});
@@ -32,12 +33,12 @@ function instalar(app,db,limited){
  });
 }
 function instalarAdministracion(app,db,ruta){
- ruta('get','/api/solicitudes',async(req,res)=>res.json((await db.query("SELECT id_solicitud,nombre,nombre_usuario,correo,telefono,nombre_comercial,rol,estado,fecha,revisada_en FROM solicitud_acceso ORDER BY CASE WHEN estado='pendiente' THEN 0 ELSE 1 END,fecha DESC LIMIT 200")).rows));
+ ruta('get','/api/solicitudes',async(req,res)=>res.json((await db.query("SELECT id_solicitud,nombre,nombre_usuario,correo,telefono,nombre_comercial,rol,estado,fecha,revisada_en FROM solicitud_acceso WHERE rol='proveedor' ORDER BY CASE WHEN estado='pendiente' THEN 0 ELSE 1 END,fecha DESC LIMIT 200")).rows));
  ruta('post','/api/solicitudes/:id/decision',async(req,res)=>{
   if(!/^\d+$/.test(req.params.id)||!['aprobar','rechazar'].includes(req.body?.decision))return res.status(400).json({error:'Solicitud inválida.'});
   await db.query('BEGIN');
   try{
-   const s=(await db.query('SELECT * FROM solicitud_acceso WHERE id_solicitud=$1 FOR UPDATE',[req.params.id])).rows[0];
+   const s=(await db.query('SELECT * FROM solicitud_acceso WHERE id_solicitud=$1 AND rol=\'proveedor\' FOR UPDATE',[req.params.id])).rows[0];
    if(!s){await db.query('ROLLBACK');return res.status(404).json({error:'Solicitud no encontrada.'});}
    if(s.estado!=='pendiente'){await db.query('ROLLBACK');return res.status(409).json({error:'Esta solicitud ya fue revisada.'});}
    let idUsuario=null;
