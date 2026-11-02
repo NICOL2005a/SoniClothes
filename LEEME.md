@@ -83,9 +83,9 @@ El trabajo se entrega para uso y pruebas locales. Para Internet se necesita aloj
 
 El cliente entra al catálogo después de iniciar sesión o registrarse. Puede filtrar por categoría, buscar, elegir talla y color y añadir prendas al carrito. El carrito vive en la base, separado por cuenta. Se puede cambiar la cantidad, eliminar prendas y consultar el total antes de pagar.
 
-La pantalla de pago muestra una tarjeta ficticia, de solo lectura, y permite probar **Pago aprobado** o **Tarjeta rechazada**. El navegador envía únicamente el escenario y una clave aleatoria de operación; no envía números de tarjeta, nombres bancarios, CVC ni vencimiento. El servidor rechaza datos adicionales en ese formulario de prueba.
+La pantalla de pago muestra una tarjeta ficticia y permite enviar la compra a revisión. Administración decide el resultado en **Solicitudes → Pagos simulados**. **Mis compras** muestra el estado de cada solicitud.
 
-Al aprobar, el servidor vuelve a comprobar precios y stock, registra venta, detalles, pago, folio interno SIM- y la marca de simulación, y vacía el carrito en una sola transacción. La compra aparece en el historial del cliente y en Ingresos del administrador con etiqueta de simulación. Los pagos simulados descuentan existencias locales, pero no generan ningún cargo real. Si el pago se rechaza o no hay stock, no se guarda una venta parcial y el carrito se conserva. Las claves de operación impiden duplicar la compra al reenviar la misma solicitud.
+El carrito queda en espera durante la revisión. Al aprobar, el servidor verifica existencias, registra la compra simulada y vacía el carrito en una transacción. Al rechazar, conserva el carrito y el cliente puede ajustarlo. La migración `09_solicitud_pago.sql` guarda las solicitudes y sus decisiones.
 
 La entrega se presenta como recogida en tienda. No se implementan envíos, compras bancarias reales ni facturación fiscal. Las ilustraciones de las prendas son SVG de referencia, no fotografías de productos.
 

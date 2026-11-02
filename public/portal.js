@@ -47,6 +47,10 @@ $('close-ticket').onclick=()=>$('ticket').close();
  $('welcome').textContent=role==='cliente'?`Hola, ${person.nombre.split(' ')[0]}.`:'Tu negocio en SoniClothes.';
  for(const [label,key]of [['Nombre','nombre'],['Correo','correo'],['Teléfono','telefono']]){$('profile').append(node('p',label,'muted'),node('p',person[key]||'No registrado'));}
  if(role==='cliente'){
+  const pagos=await api('/api/portal/cliente/pagos');
+  $('payment-requests').append(pagos.length
+   ? table(['Fecha','Importe','Estado'],pagos.map(p=>[date(p.fecha),money(p.total),p.estado]))
+   : node('p','Aún no tienes solicitudes de pago.','muted'));
   if(!d.ventas.length)$('content').append(node('p','Tu próxima prenda favorita te espera. Explora la tienda y tus compras aparecerán aquí.','empty'));
   else $('content').append(table(['Folio','Fecha','Total','Detalle'],d.ventas.map(v=>{
    const b=node('button','Ver compra','button secondary');b.type='button';b.onclick=async()=>{try{const x=await api('/api/portal/cliente/ventas/'+v.id_venta);$('ticket-content').replaceChildren(node('p',`${x.folio} · ${date(x.fecha)}`));x.detalles.forEach(i=>$('ticket-content').append(node('p',`${i.cantidad} × ${i.nombre} · ${i.talla} / ${i.color} · ${money(i.cantidad*i.precio_unitario)}`)));$('ticket-content').append(node('strong','Total: '+money(x.total)));if(x.simulada)$('ticket-content').append(node('p','Pago simulado. No se realizó ningún cargo real.','muted')); $('ticket').showModal();}catch(e){error(e);}};

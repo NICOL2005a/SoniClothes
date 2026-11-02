@@ -39,10 +39,11 @@ function renderProducts(){
 function renderCart(){
  $('cart-items').replaceChildren();count();$('cart-units').textContent=`${cart.unidades} ${cart.unidades===1?'prenda':'prendas'}`;
  $('subtotal').textContent=$('cart-total').textContent=money(cart.total);
- const invalid=!cart.items.length||cart.items.some(i=>i.cantidad>i.existencia);$('checkout-link').classList.toggle('disabled-link',invalid);$('checkout-link').setAttribute('aria-disabled',String(invalid));$('checkout-link').tabIndex=invalid?-1:0;
+ const invalid=cart.pendiente||!cart.items.length||cart.items.some(i=>i.cantidad>i.existencia);$('checkout-link').classList.toggle('disabled-link',invalid);$('checkout-link').setAttribute('aria-disabled',String(invalid));$('checkout-link').tabIndex=invalid?-1:0;
+ if(cart.pendiente)notice('Tu carrito está pendiente de revisión. Consulta Mis compras para ver el estado.');
  if(!cart.items.length){const empty=node('div',undefined,'shop-empty');empty.append(node('h2','Tu carrito espera un buen look.'),node('p','Descubre los esenciales de SoniClothes.'));const link=node('a','Explorar prendas ↗','button');link.href='tienda.html';empty.append(link);$('cart-items').append(empty);return;}
  cart.items.forEach(i=>{const row=node('article',undefined,'cart-row'),thumb=node('div',undefined,'cart-thumb'),info=node('div'),controls=node('div'),qty=node('div',undefined,'qty-control');thumb.append(garment(i.nombre,i.color));info.append(node('h3',i.nombre),node('p',`Talla ${i.talla} · ${i.color}`));
-  const minus=node('button','−'),plus=node('button','+'),remove=node('button','Eliminar','remove-item');minus.setAttribute('aria-label','Quitar una unidad de '+i.nombre);plus.setAttribute('aria-label','Agregar una unidad de '+i.nombre);plus.disabled=i.cantidad>=i.existencia||i.cantidad>=100;
+  const minus=node('button','−'),plus=node('button','+'),remove=node('button','Eliminar','remove-item');minus.setAttribute('aria-label','Quitar una unidad de '+i.nombre);plus.setAttribute('aria-label','Agregar una unidad de '+i.nombre);plus.disabled=cart.pendiente||i.cantidad>=i.existencia||i.cantidad>=100;minus.disabled=remove.disabled=cart.pendiente;
   minus.onclick=()=>changeVariant(i.id_variante,i.cantidad-1);plus.onclick=()=>changeVariant(i.id_variante,i.cantidad+1);remove.onclick=()=>changeVariant(i.id_variante,0);qty.append(minus,node('span',String(i.cantidad)),plus);controls.append(qty,remove);info.append(controls);
   if(i.cantidad>i.existencia)info.append(node('p',`Solo quedan ${i.existencia} unidades. Reduce la cantidad para continuar.`,'unavailable'));
   row.append(thumb,info,node('strong',money(Number(i.precio_venta)*i.cantidad)));$('cart-items').append(row);
@@ -50,8 +51,10 @@ function renderCart(){
 }
 function renderPayment(){
  if(!cart.items.length){$('payment-layout').hidden=true;notice('Tu carrito está vacío. Vuelve a la tienda para elegir tus prendas.');return;}
- $('payment-items').replaceChildren();cart.items.forEach(i=>{const row=node('div',undefined,'payment-item'),text=node('div');text.append(node('strong',`${i.cantidad} × ${i.nombre}`),node('p',`${i.talla} · ${i.color}`));row.append(text,node('strong',money(i.cantidad*Number(i.precio_venta))));$('payment-items').append(row);});$('payment-total').textContent=money(cart.total);$('pay-button').textContent='Simular pago de '+money(cart.total);
- $('pay-button').disabled=cart.items.some(i=>i.cantidad>i.existencia);if($('pay-button').disabled)notice('La disponibilidad cambió. Ajusta las cantidades en tu carrito.',true);
+ $('payment-items').replaceChildren();cart.items.forEach(i=>{const row=node('div',undefined,'payment-item'),text=node('div');text.append(node('strong',`${i.cantidad} × ${i.nombre}`),node('p',`${i.talla} · ${i.color}`));row.append(text,node('strong',money(i.cantidad*Number(i.precio_venta))));$('payment-items').append(row);});$('payment-total').textContent=money(cart.total);$('pay-button').textContent='Enviar a revisión · '+money(cart.total);
+ $('pay-button').disabled=cart.pendiente||cart.items.some(i=>i.cantidad>i.existencia);
+ if(cart.pendiente)notice('Tu pago está pendiente. Consulta su estado en Mis compras.');
+ else if($('pay-button').disabled)notice('La disponibilidad cambió. Ajusta las cantidades en tu carrito.',true);
 }
 (async()=>{try{
  const me=await window.soniReady;if(!me)return;if(me.rol!=='cliente'){location.assign(me.destino);return;}
@@ -62,9 +65,9 @@ function renderPayment(){
  }else if(page==='carrito')renderCart();
  else{
   renderPayment();paymentId=crypto.randomUUID();
-  $('payment-form').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;$('pay-button').disabled=true;$('pay-button').textContent='Procesando simulación…';$('shop-status').hidden=true;
-   try{const result=await api('checkout',{escenario:$('scenario').value,id_solicitud:paymentId});$('payment-layout').hidden=true;$('payment-success').hidden=false;$('success-copy').textContent=`Folio ${result.folio} · Total ${money(result.total)}`;cart={items:[],unidades:0,total:0};count();$('payment-success').tabIndex=-1;$('payment-success').focus();}
-   catch(e){notice(e.message,true);$('pay-button').disabled=false;$('pay-button').textContent='Reintentar pago simulado';}finally{busy=false;}
+  $('payment-form').onsubmit=async e=>{e.preventDefault();if(busy||cart.pendiente||$('pay-button').disabled)return;busy=true;$('pay-button').disabled=true;$('pay-button').textContent='Enviando solicitud…';$('shop-status').hidden=true;
+   try{const result=await api('checkout',{id_solicitud:paymentId});$('payment-layout').hidden=true;$('payment-success').hidden=false;$('success-copy').textContent=`Estado: ${result.estado} · Total ${money(result.total)}`;$('payment-success').tabIndex=-1;$('payment-success').focus();}
+   catch(e){notice(e.message,true);$('pay-button').disabled=false;$('pay-button').textContent='Reintentar envío';}finally{busy=false;}
   };
  }
 }catch(e){notice(e.message,true);}})();

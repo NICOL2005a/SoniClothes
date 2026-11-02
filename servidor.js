@@ -89,9 +89,9 @@ app.use((req,res,next)=>{
  const rol=req.usuario.rol;
  const portal=rol==='cliente'?'/cliente.html':'/proveedor.html';
  if(rol==='administrador') {
-  const lectura=['/api/directorio','/api/ingresos','/api/revision','/api/solicitudes','/api/proveedores'];
+  const lectura=['/api/pagos-pendientes','/api/directorio','/api/ingresos','/api/revision','/api/solicitudes','/api/proveedores'];
   const permitido=req.method==='GET'&&lectura.includes(req.path) ||
-    req.method==='POST'&&/^\/api\/(revision\/\d+|solicitudes\/\d+\/decision)$/.test(req.path);
+    req.method==='POST'&&/^\/api\/(pagos-pendientes\/[0-9a-f-]{36}|revision\/\d+|solicitudes\/\d+\/decision)$/.test(req.path);
   if(req.path.startsWith('/api/')&&!permitido)return res.status(403).json({error:'Esta operación no corresponde a Administración.'});
   if(['/proveedores.html','/catalogo.html','/tienda.html','/carrito.html','/pago.html','/cliente.html','/proveedor.html'].includes(req.path))return res.redirect('/ventas.html');
   return next();
@@ -99,7 +99,7 @@ app.use((req,res,next)=>{
  if(rol==='proveedor' && ((req.method==='GET'&&['/proveedores.html','/supplier.css'].includes(req.path)) ||
   (req.method==='POST'&&req.path==='/api/cuestionarios')))return next();
  const assets=['/portal.css','/portal.js','/app.css','/app-shell.js','/tienda.css','/tienda.js'];
- const api=rol==='cliente'?/^\/api\/portal\/cliente(?:\/ventas\/\d+|\/catalogo|\/carrito|\/checkout)?$/:/^\/api\/portal\/proveedor$/;
+ const api=rol==='cliente'?/^\/api\/portal\/cliente(?:\/ventas\/\d+|\/catalogo|\/carrito|\/pagos|\/checkout)?$/:/^\/api\/portal\/proveedor$/;
  const paginasCliente=['/tienda.html','/carrito.html','/pago.html'];
  if((req.method==='GET' && /^\/fotos\/\d+\/\d+$/.test(req.path))||(rol==='proveedor' && req.method==='PUT' && /^\/api\/portal\/proveedor\/foto\/\d+$/.test(req.path)))return next();
  if(req.path===portal||assets.includes(req.path)||(rol==='cliente'&&paginasCliente.includes(req.path))||api.test(req.path))return next();
