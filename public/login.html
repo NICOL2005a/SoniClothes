@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+ <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ <meta name="color-scheme" content="light"><meta name="theme-color" content="#f7f5f0">
+ <title>Tu espacio · SoniClothes</title><link rel="stylesheet" href="login.css"><script src="login.js" defer></script>
+</head>
+<body>
+ <header class="site-header"><a class="wordmark" href="/login.html" aria-label="SoniClothes, inicio">Soni<span>Clothes</span><i></i></a><span class="header-note">ROPA CASUAL. A TU MANERA.</span><span class="header-right">Hombre & mujer <span aria-hidden="true">↗</span></span></header>
+ <main class="auth-layout">
+  <section class="story" aria-labelledby="story-title">
+   <div class="eyebrow"><span class="tiny-line"></span> TU ESTILO DE TODOS LOS DÍAS</div>
+   <h1 id="story-title">Lo cotidiano,<br>con <em>personalidad.</em></h1>
+   <p class="story-copy">Prendas que van contigo.<br>Un espacio que conecta nuestra comunidad.</p>
+   <div class="fabric-composition" aria-hidden="true">
+    <div class="fabric fabric-olive"><span>Esenciales<br>para ser tú.</span><b>SC / 01</b></div>
+    <div class="fabric fabric-sand"><div class="garment-tag"><span>SONICLOTHES</span><strong>everyday<br>essentials.</strong><small>HECHO PARA TU DÍA A DÍA</small><div class="barcode"></div><span>CASUAL COLLECTION</span></div></div>
+    <div class="fabric-caption">TEXTURAS NATURALES <span>ESTILO SIN COMPLICACIONES</span></div>
+   </div>
+   <div class="story-footer"><span>Una comunidad. Muchas formas de vestir.</span><span class="dot-row" aria-hidden="true"><i></i><i></i><i></i></span></div>
+  </section>
+  <section class="access" aria-labelledby="access-title">
+   <div class="form-wrap">
+    <div class="form-eyebrow">BIENVENIDO A SONICLOTHES</div>
+    <h2 id="access-title">Este es tu espacio.</h2>
+    <p id="form-description" class="intro">Elige cómo quieres entrar y continúa con tu cuenta.</p>
+    <div class="role-switch" role="group" aria-label="Tipo de acceso">
+     <button type="button" data-role="cliente" aria-pressed="true" class="role active"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1 12H5L6 8Zm3 0V6a3 3 0 0 1 6 0v2"/></svg>Cliente</button>
+     <button type="button" data-role="proveedor" aria-pressed="false" class="role"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5v9l-9 5-9-5V8l9-5Zm0 9 9-4M3 8l9 4v10M8 5l9 5"/></svg>Proveedor</button>
+     <button type="button" data-role="administrador" aria-pressed="false" class="role"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Zm-4 9 3 3 5-6"/></svg>Administrador</button>
+    </div>
+    <p class="role-description" id="role-description">Consulta tus compras y encuentra todo en un solo lugar.</p>
+    <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+    <form id="auth-form" method="post" action="/api/login">
+     <input type="hidden" name="rol" id="rol" value="cliente">
+     <div class="signup-field" hidden><label for="nombre">Nombre completo</label><input id="nombre" name="nombre" autocomplete="name" maxlength="120" placeholder="Tu nombre y apellido"></div>
+     <div class="signup-field" hidden><label for="correo">Correo electrónico</label><input id="correo" name="correo" type="email" autocomplete="email" maxlength="190" placeholder="tu@correo.com"></div>
+     <div id="business-field" hidden><label for="nombre-comercial">Nombre de tu negocio</label><input id="nombre-comercial" name="nombre_comercial" autocomplete="organization" maxlength="120" placeholder="Nombre comercial"></div>
+     <label for="usuario" id="user-label">Usuario o correo electrónico</label>
+     <input id="usuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required maxlength="190" placeholder="Ingresa tu usuario o correo">
+     <label for="contrasena">Contraseña</label>
+     <div class="password-wrap"><input id="contrasena" name="contrasena" type="password" autocomplete="current-password" required maxlength="255" placeholder="Ingresa tu contraseña"><button type="button" class="show-password" aria-label="Mostrar contraseña" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+     <div class="signup-field" hidden><label for="confirmacion">Confirma tu contraseña</label><input id="confirmacion" name="confirmacion" type="password" autocomplete="new-password" maxlength="128" placeholder="Vuelve a escribir tu contraseña"><small class="field-help">Usa al menos 12 caracteres. Puedes escribir una frase.</small></div>
+     <div id="login-options" class="form-options"><label class="remember"><input type="checkbox" id="recordar"> Recordar mi usuario</label><button type="button" id="help-button" class="text-button">¿Necesitas ayuda?</button></div>
+     <p id="approval-note" class="approval-note" hidden></p>
+     <button class="submit-button" id="submit-button" type="submit"><span>Entrar a mi cuenta</span><span aria-hidden="true">↗</span></button>
+    </form>
+    <p class="mode-switch"><span id="mode-prompt">¿Aún no tienes cuenta?</span> <button id="mode-button" class="text-button" type="button">Crear cuenta</button></p>
+    <div class="privacy-note"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="4" y="9" width="12" height="9" rx="2"/><path d="M6 9V6a4 4 0 0 1 8 0v3"/></svg><span>Tu acceso, tus datos, tu espacio.</span></div>
+    <p id="demo-note" class="demo-note" hidden>Entorno de demostración · Usa únicamente datos de prueba.</p>
+   </div>
+  </section>
+ </main>
+ <footer class="site-footer"><span>© <span id="year">2026</span> SoniClothes</span><span>CASUAL SE VE BIEN EN TI.</span><span>Hecho para el día a día.</span></footer>
+ <noscript><p class="noscript">Activa JavaScript para iniciar sesión o crear tu cuenta.</p></noscript>
+</body></html>
