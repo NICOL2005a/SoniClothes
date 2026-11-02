@@ -26,7 +26,7 @@ function instalar(app,db,limited){
     }catch(e){await db.query('ROLLBACK');throw e;}
    });
    if(!result)return res.status(409).json({error:'El usuario o correo ya tiene una cuenta o solicitud pendiente.'});
-   if(result.usuario){req.crearSesion(result.usuario);return res.status(201).json({ok:true,estado:'activa',destino:'/cliente.html'});}
+   if(result.usuario){req.crearSesion(result.usuario);return res.status(201).json({ok:true,estado:'activa',destino:'/tienda.html'});}
    res.status(202).json({ok:true,estado:'pendiente',mensaje:'Recibimos tu solicitud. La administración de SoniClothes debe aprobarla antes de que puedas entrar.'});
   }catch(e){if(e.code==='23505')return res.status(409).json({error:'El usuario o correo ya está registrado.'});next(e);}
  });

@@ -28,10 +28,10 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  equal((await req('/api/solicitudes',accounts.client)).status,403);equal((await req('/api/proveedores',accounts.provider)).status,403);
  equal((await req('/api/ventas',accounts.client,{id_metodo_pago:1,items:[]})).status,403);
  equal((await req('/api/portal/proveedor',accounts.client)).status,403);equal((await req('/api/portal/cliente',accounts.provider)).status,403);
- equal((await req('/ventas.html',accounts.client)).headers.get('location'),'/cliente.html');
+ equal((await req('/ventas.html',accounts.client)).headers.get('location'),'/tienda.html');
  equal((await req('/api/login',null,{usuario:'admin.demo',contrasena:'SoniDemo!2026-Admin',rol:'administrador'},{Origin:'https://ajeno.example'})).status,403);
  // Alta cliente: sin aprobación y sesión inmediata.
- const b=registration('cliente-nuevo','cliente');r=await req('/api/registro',accounts.other,b);equal(r.status,201);equal(r.data.destino,'/cliente.html');
+ const b=registration('cliente-nuevo','cliente');r=await req('/api/registro',accounts.other,b);equal(r.status,201);equal(r.data.destino,'/tienda.html');
  equal((await req('/api/sesion',accounts.other)).data.rol,'cliente');equal((await req('/api/portal/cliente',accounts.other)).data.ventas.length,0);
  equal((await req('/api/registro',null,b)).status,409);
  equal((await req('/api/registro',null,{...registration('sin-validar','cliente'),rol:'superadmin'})).status,400);
@@ -47,6 +47,48 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  const before=(await req('/api/catalogo',accounts.admin)).data[0].existencia;
  equal((await req('/api/ventas',accounts.admin,{id_metodo_pago:1,items:[{id_variante:cat[0].id_variante,cantidad:1},{id_variante:cat[1].id_variante,cantidad:999}]})).status,400);
  equal((await req('/api/catalogo',accounts.admin)).data[0].existencia,before);
+
+ // Tienda y pago: siempre con precios y propiedad comprobados en el servidor.
+ const {randomUUID}=require('node:crypto');
+ equal((await req('/api/portal/cliente/catalogo',accounts.client)).status,200);
+ equal((await req('/api/portal/cliente/carrito',accounts.provider)).status,403);
+ equal((await req('/api/portal/cliente/checkout',accounts.admin,{escenario:'aprobado',id_solicitud:randomUUID()})).status,403);
+ equal((await req('/api/portal/cliente/carrito',accounts.client,{id_variante:cat[0].id_variante,cantidad:-1})).status,400);
+ equal((await req('/api/portal/cliente/carrito',accounts.client,{id_variante:999999,cantidad:1})).status,404);
+ equal((await req('/api/portal/cliente/carrito',accounts.client,{id_variante:cat[0].id_variante,cantidad:100})).status,409);
+ equal((await req('/api/portal/cliente/checkout',accounts.client,{escenario:'aprobado',id_solicitud:randomUUID()})).status,400);
+ const c1=await req('/api/portal/cliente/carrito',accounts.client,{id_variante:cat[0].id_variante,cantidad:2,precio_venta:0.01,id_usuario:999});equal(c1.status,200);equal(c1.data.total,Number(cat[0].precio_venta)*2);
+ equal((await req('/api/portal/cliente/carrito',accounts.other)).data.items.length,0);
+ const stockBefore=(await req('/api/catalogo',accounts.admin)).data.find(p=>p.id_variante===cat[0].id_variante).existencia;
+ const declined=await req('/api/portal/cliente/checkout',accounts.client,{escenario:'rechazado',id_solicitud:randomUUID()});equal(declined.status,402);
+ equal((await req('/api/portal/cliente/carrito',accounts.client)).data.unidades,2);
+ equal((await req('/api/catalogo',accounts.admin)).data.find(p=>p.id_variante===cat[0].id_variante).existencia,stockBefore);
+ const key=randomUUID();
+ equal((await req('/api/portal/cliente/checkout',accounts.client,{escenario:'aprobado',id_solicitud:key,tarjeta:'4242424242424242'})).status,400);
+ const checkout=await req('/api/portal/cliente/checkout',accounts.client,{escenario:'aprobado',id_solicitud:key});equal(checkout.status,201);equal(checkout.data.total,Number(cat[0].precio_venta)*2);equal(checkout.data.simulada,true);
+ equal((await req('/api/portal/cliente/carrito',accounts.client)).data.items.length,0);
+ equal((await req('/api/catalogo',accounts.admin)).data.find(p=>p.id_variante===cat[0].id_variante).existencia,stockBefore-2);
+ const repeat=await req('/api/portal/cliente/checkout',accounts.client,{escenario:'aprobado',id_solicitud:key});equal(repeat.status,200);equal(repeat.data.id_venta,checkout.data.id_venta);
+ equal((await req('/api/portal/cliente/ventas/'+checkout.data.id_venta,accounts.other)).status,404);
+ equal((await req('/api/portal/cliente/ventas/'+checkout.data.id_venta,accounts.client)).data.simulada,true);
+ equal((await req('/api/ventas/'+checkout.data.id_venta,accounts.admin)).data.simulada,true);
+ // Si cambia stock entre carrito y pago, no queda una venta parcial ni se vacía el carrito.
+ await req('/api/portal/cliente/carrito',accounts.client,{id_variante:cat[0].id_variante,cantidad:1});
+ await req('/api/portal/cliente/carrito',accounts.client,{id_variante:cat[2].id_variante,cantidad:11});
+ const consume=await req('/api/ventas',accounts.admin,{id_metodo_pago:1,items:[{id_variante:cat[2].id_variante,cantidad:2}]});equal(consume.status,201);
+ const intacto=(await req('/api/catalogo',accounts.admin)).data.find(p=>p.id_variante===cat[0].id_variante).existencia;
+ equal((await req('/api/portal/cliente/checkout',accounts.client,{escenario:'aprobado',id_solicitud:randomUUID()})).status,409);
+ equal((await req('/api/catalogo',accounts.admin)).data.find(p=>p.id_variante===cat[0].id_variante).existencia,intacto);
+ equal((await req('/api/portal/cliente/carrito',accounts.client)).data.items.length,2);
+ equal((await req('/api/portal/cliente/carrito',accounts.client,{id_variante:cat[2].id_variante,cantidad:0})).status,200);
+ for(const html of ['/tienda.html','/carrito.html','/pago.html','/app.css','/app-shell.js','/tienda.css','/tienda.js'])equal((await req(html,accounts.client)).status,200);
+
+ // Reintentos simultáneos con la misma clave solo generan una compra.
+ const concurrentKey=randomUUID();
+ const simultaneous=await Promise.all([req('/api/portal/cliente/checkout',accounts.client,{escenario:'aprobado',id_solicitud:concurrentKey}),req('/api/portal/cliente/checkout',accounts.client,{escenario:'aprobado',id_solicitud:concurrentKey})]);
+ equal(simultaneous.map(r=>r.status).sort().join(','),'200,201');equal(simultaneous[0].data.id_venta,simultaneous[1].data.id_venta);
+ equal((await req('/api/portal/cliente/carrito',accounts.client)).data.items.length,0);
+ equal((await req('/api/portal/cliente/checkout',accounts.client,{escenario:'aprobado',id_solicitud:'________-____-4___-8___-____________'})).status,400);
  // Proveedor pendiente: no sesión, ningún privilegio, aprobación exclusiva del admin.
  const supplier=registration('nuevo-proveedor','proveedor');r=await req('/api/registro',accounts.newProvider,supplier);equal(r.status,202);equal(accounts.newProvider.cookie,'');
  equal((await login(accounts.newProvider,supplier.usuario,supplier.contrasena,'proveedor')).status,401);
@@ -70,5 +112,5 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  for(const html of ['/cliente.html','/portal.css','/portal.js'])equal((await req(html,accounts.client)).status,200);
  for(const html of ['/ventas.html','/catalogo.html','/proveedores.html','/solicitudes.html'])equal((await req(html,accounts.admin)).status,200);
  equal((await req('/api/logout',accounts.client,{})).status,200);equal((await req('/api/portal/cliente',accounts.client)).status,401);
- console.log(`OK: ${assertions} comprobaciones. Registro de cliente inmediato; proveedor y administrador pendientes; aprobación/rechazo; bloqueo de escalada; aislamiento entre cuentas; venta, ticket y reversión de stock.`);
+ console.log(`OK: ${assertions} comprobaciones. Registro de cliente inmediato; proveedor y administrador pendientes; aprobación/rechazo; bloqueo de escalada; aislamiento entre cuentas; carrito persistente; pago aprobado/rechazado; prevención de doble pago; totales de servidor; reversión por cambio de stock.`);
  }catch(e){console.error(e);console.error(errors);process.exitCode=1;}finally{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)resolve();else child.once('exit',resolve);});fs.rmSync(dir,{recursive:true,force:true});}})();

@@ -19,7 +19,7 @@ async function iniciar() {
     driver = new PGlite(process.env.DEMO_DATA_DIR || path.join(__dirname,'datos'));
     await driver.waitReady;
   }
-  const archivos = ['01_esquema.sql','02_cuestionario.sql','04_accesos.sql','05_solicitudes.sql'];
+  const archivos = ['01_esquema.sql','02_cuestionario.sql','04_accesos.sql','05_solicitudes.sql','06_tienda.sql'];
   if (process.env.SONICLOTHES_DEMO === '1') {
     if (process.env.DB_MODE === 'postgres') throw new Error('Las cuentas demo solo se permiten en la base integrada.');
     archivos.push('03_datos_demo.sql');

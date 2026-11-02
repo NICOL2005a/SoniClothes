@@ -2,7 +2,7 @@ const { randomBytes, scrypt, timingSafeEqual } = require('node:crypto');
 const { promisify } = require('node:util');
 const derive = promisify(scrypt);
 const roles = ['cliente', 'proveedor', 'administrador'];
-const destinos = {cliente:'/cliente.html',proveedor:'/proveedor.html',administrador:'/ventas.html'};
+const destinos = {cliente:'/tienda.html',proveedor:'/proveedor.html',administrador:'/ventas.html'};
 async function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
   return `scrypt:${salt}:${(await derive(password,salt,32)).toString('hex')}`;

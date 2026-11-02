@@ -10,15 +10,15 @@ $('logout').onclick=async()=>{try{await api('/api/logout',{method:'POST'});locat
 $('close-ticket').onclick=()=>$('ticket').close();
 (async()=>{try{
  const me=await api('/api/sesion');if(me.rol!==role){location.assign(me.destino);return;}
- $('session-name').textContent=me.nombre;
+ if($('session-name'))$('session-name').textContent=me.nombre;
  const d=await api('/api/portal/'+role),person=d.cliente||d.proveedor;
  $('welcome').textContent=role==='cliente'?`Hola, ${person.nombre.split(' ')[0]}.`:'Tu negocio en SoniClothes.';
  for(const [label,key]of [['Nombre','nombre'],['Correo','correo'],['Teléfono','telefono']]){$('profile').append(node('p',label,'muted'),node('p',person[key]||'No registrado'));}
  if(role==='cliente'){
-  if(!d.ventas.length)$('content').append(node('p','Aún no tienes compras asociadas a esta cuenta. Cuando registres una compra en la tienda con tu cuenta vinculada, aparecerá aquí.','empty'));
+  if(!d.ventas.length)$('content').append(node('p','Tu próxima prenda favorita te espera. Explora la tienda y tus compras aparecerán aquí.','empty'));
   else $('content').append(table(['Folio','Fecha','Total','Detalle'],d.ventas.map(v=>{
-   const b=node('button','Ver compra','button secondary');b.type='button';b.onclick=async()=>{try{const x=await api('/api/portal/cliente/ventas/'+v.id_venta);$('ticket-content').replaceChildren(node('p',`${x.folio} · ${date(x.fecha)}`));x.detalles.forEach(i=>$('ticket-content').append(node('p',`${i.cantidad} × ${i.nombre} · ${i.talla} / ${i.color} · ${money(i.cantidad*i.precio_unitario)}`)));$('ticket-content').append(node('strong','Total: '+money(x.total)));$('ticket').showModal();}catch(e){error(e);}};
-   return [v.folio||'Sin folio',date(v.fecha),money(v.total),b];
+   const b=node('button','Ver compra','button secondary');b.type='button';b.onclick=async()=>{try{const x=await api('/api/portal/cliente/ventas/'+v.id_venta);$('ticket-content').replaceChildren(node('p',`${x.folio} · ${date(x.fecha)}`));x.detalles.forEach(i=>$('ticket-content').append(node('p',`${i.cantidad} × ${i.nombre} · ${i.talla} / ${i.color} · ${money(i.cantidad*i.precio_unitario)}`)));$('ticket-content').append(node('strong','Total: '+money(x.total)));if(x.simulada)$('ticket-content').append(node('p','Pago simulado. No se realizó ningún cargo real.','muted')); $('ticket').showModal();}catch(e){error(e);}};
+   return [(v.folio||'Sin folio')+(v.simulada?' · Simulada':''),date(v.fecha),money(v.total),b];
   })));
  }else{
   if(!d.productos.length)$('content').append(node('p','Todavía no hay productos vinculados a tu negocio.','empty'));else $('content').append(table(['Prenda','Marca','Categoría'],d.productos.map(p=>[p.nombre,p.marca||'—',p.categoria])));

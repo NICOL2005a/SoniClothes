@@ -46,7 +46,7 @@ form.addEventListener('submit',async e=>{
   const r=await fetch(form.action,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(payload)});
   const data=await r.json();if(!r.ok)throw Error(data.error||'No pudimos completar la solicitud.');
   if(data.destino){
-   if(!['/cliente.html','/proveedor.html','/ventas.html'].includes(data.destino))throw Error('Destino no válido.');
+   if(!['/tienda.html','/cliente.html','/proveedor.html','/ventas.html'].includes(data.destino))throw Error('Destino no válido.');
    try{if($('#recordar').checked&&mode==='login')localStorage.setItem('soni_usuario_'+role,payload.usuario);else localStorage.removeItem('soni_usuario_'+role);}catch{}
    location.assign(data.destino);return;
   }

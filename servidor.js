@@ -92,9 +92,10 @@ app.use((req,res,next)=>{
   if(req.path.startsWith('/api/portal/'))return res.status(403).json({error:'Esta sección corresponde a otra cuenta.'});
   return next();
  }
- const assets=['/portal.css','/portal.js'];
- const api=rol==='cliente'?/^\/api\/portal\/cliente(?:\/ventas\/\d+)?$/:/^\/api\/portal\/proveedor$/;
- if(req.path===portal||assets.includes(req.path)||api.test(req.path))return next();
+ const assets=['/portal.css','/portal.js','/app.css','/app-shell.js','/tienda.css','/tienda.js'];
+ const api=rol==='cliente'?/^\/api\/portal\/cliente(?:\/ventas\/\d+|\/catalogo|\/carrito|\/checkout)?$/:/^\/api\/portal\/proveedor$/;
+ const paginasCliente=['/tienda.html','/carrito.html','/pago.html'];
+ if(req.path===portal||assets.includes(req.path)||(rol==='cliente'&&paginasCliente.includes(req.path))||api.test(req.path))return next();
  if(req.path.startsWith('/api/'))return res.status(403).json({error:'Tu cuenta no tiene acceso a esta sección.'});
  return res.redirect(destinos[rol]);
 });
@@ -102,12 +103,12 @@ app.use(express.static(path.join(__dirname,'public')));
 app.get('/api/portal/cliente',async(req,res,next)=>{
  try {res.json(await db.exclusive(async()=>({
   cliente:(await db.query('SELECT nombre,telefono,correo FROM cliente WHERE id_cliente=$1',[req.usuario.id_cliente])).rows[0],
-  ventas:(await db.query('SELECT v.id_venta,v.fecha,v.total,f.folio FROM vista_venta_total v LEFT JOIN factura f USING(id_venta) WHERE v.id_cliente=$1 ORDER BY v.fecha DESC LIMIT 100',[req.usuario.id_cliente])).rows
+  ventas:(await db.query('SELECT v.id_venta,v.fecha,v.total,f.folio,(s.id_venta IS NOT NULL) AS simulada FROM vista_venta_total v LEFT JOIN factura f USING(id_venta) LEFT JOIN venta_simulada s USING(id_venta) WHERE v.id_cliente=$1 ORDER BY v.fecha DESC LIMIT 100',[req.usuario.id_cliente])).rows
  })));}catch(e){next(e);}
 });
 app.get('/api/portal/cliente/ventas/:id',async(req,res,next)=>{
  try {await db.exclusive(async()=>{
-  const venta=(await db.query('SELECT v.id_venta,v.fecha,v.total,f.folio FROM vista_venta_total v LEFT JOIN factura f USING(id_venta) WHERE v.id_venta=$1 AND v.id_cliente=$2',[req.params.id,req.usuario.id_cliente])).rows[0];
+  const venta=(await db.query('SELECT v.id_venta,v.fecha,v.total,f.folio,(s.id_venta IS NOT NULL) AS simulada FROM vista_venta_total v LEFT JOIN factura f USING(id_venta) LEFT JOIN venta_simulada s USING(id_venta) WHERE v.id_venta=$1 AND v.id_cliente=$2',[req.params.id,req.usuario.id_cliente])).rows[0];
   if(!venta)return res.status(404).json({error:'Compra no encontrada.'});
   venta.detalles=(await db.query('SELECT d.cantidad,d.precio_unitario,p.nombre,v.talla,v.color FROM detalle_venta d JOIN variante_producto v USING(id_variante) JOIN producto p USING(id_producto) WHERE d.id_venta=$1',[req.params.id])).rows;
   res.json(venta);
@@ -125,15 +126,16 @@ const ruta = (method,url,fn) => app[method](url,async(req,res,next)=>{
   try { await db.exclusive(()=>fn(req,res)); } catch(e) { next(e); }
 });
 require('./registro').instalarAdministracion(app,db,ruta);
+require('./tienda').instalar(app,db,ruta);
 ruta('get','/api/catalogo',async(req,res)=>res.json((await db.query('SELECT * FROM vista_catalogo_prendas ORDER BY id_variante')).rows));
 ruta('get','/api/opciones',async(req,res)=>res.json({
   clientes:(await db.query('SELECT * FROM cliente ORDER BY nombre')).rows,
-  metodos:(await db.query('SELECT * FROM metodo_pago ORDER BY id_metodo_pago')).rows
+  metodos:(await db.query("SELECT * FROM metodo_pago WHERE nombre <> 'Tarjeta simulada' ORDER BY id_metodo_pago")).rows
 }));
-ruta('get','/api/ventas',async(req,res)=>res.json((await db.query(`SELECT v.*,c.nombre AS cliente,f.folio FROM vista_venta_total v LEFT JOIN cliente c USING(id_cliente) LEFT JOIN factura f USING(id_venta) ORDER BY v.id_venta DESC LIMIT 50`)).rows));
+ruta('get','/api/ventas',async(req,res)=>res.json((await db.query(`SELECT v.*,c.nombre AS cliente,f.folio,(s.id_venta IS NOT NULL) AS simulada FROM vista_venta_total v LEFT JOIN cliente c USING(id_cliente) LEFT JOIN factura f USING(id_venta) LEFT JOIN venta_simulada s USING(id_venta) ORDER BY v.id_venta DESC LIMIT 50`)).rows));
 ruta('get','/api/ventas/:id',async(req,res)=>{
   if (!/^\d+$/.test(req.params.id)) throw error400('Folio inválido.');
-  const venta=(await db.query(`SELECT v.*,f.folio,c.nombre AS cliente FROM vista_venta_total v LEFT JOIN factura f USING(id_venta) LEFT JOIN cliente c USING(id_cliente) WHERE v.id_venta=$1`,[req.params.id])).rows[0];
+  const venta=(await db.query(`SELECT v.*,f.folio,c.nombre AS cliente,(s.id_venta IS NOT NULL) AS simulada FROM vista_venta_total v LEFT JOIN factura f USING(id_venta) LEFT JOIN cliente c USING(id_cliente) LEFT JOIN venta_simulada s USING(id_venta) WHERE v.id_venta=$1`,[req.params.id])).rows[0];
   if (!venta) return res.status(404).json({error:'Venta no encontrada.'});
   venta.detalles=(await db.query(`SELECT d.*,p.nombre,v.talla,v.color FROM detalle_venta d JOIN variante_producto v USING(id_variante) JOIN producto p USING(id_producto) WHERE id_venta=$1`,[req.params.id])).rows;
   res.json(venta);
@@ -149,7 +151,7 @@ ruta('post','/api/ventas',async(req,res)=>{
   }
   await db.query('BEGIN');
   try {
-    if (!(await db.query('SELECT 1 FROM metodo_pago WHERE id_metodo_pago=$1',[b.id_metodo_pago])).rows.length) throw error400('Método de pago inválido.');
+    if (!(await db.query("SELECT 1 FROM metodo_pago WHERE id_metodo_pago=$1 AND nombre <> 'Tarjeta simulada'",[b.id_metodo_pago])).rows.length) throw error400('Método de pago inválido.');
     if (b.id_cliente && (!/^\d+$/.test(String(b.id_cliente)) || !(await db.query('SELECT 1 FROM cliente WHERE id_cliente=$1',[b.id_cliente])).rows.length)) throw error400('Cliente inválido.');
     const usuario=req.usuario;
     const v=(await db.query('INSERT INTO venta(id_cliente,id_usuario) VALUES($1,$2) RETURNING id_venta',[b.id_cliente||null,usuario.id_usuario])).rows[0];
