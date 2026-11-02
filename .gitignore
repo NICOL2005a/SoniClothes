@@ -4,3 +4,5 @@ datos/
 .DS_Store
 
 .demo-data/
+
+/node_modules
