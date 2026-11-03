@@ -2,7 +2,7 @@
 
 Rediseño en HTML, CSS y JavaScript con registro y autenticación conectados a PostgreSQL/PGlite. Solo modo claro. Las texturas usan CSS y la pantalla no necesita imágenes ni tipografías externas.
 
-Esta carpeta es una copia de `/Users/nicky/Desktop/WEB/pos_ropa_bootstrap`. La carpeta original y su base no se modificaron. `datos/` contiene la copia de la base existente. La demostración usa otra base, `.demo-data/`, para separar las pruebas de tus registros.
+Copia de `/Users/nicky/Desktop/WEB/pos_ropa_bootstrap`en cuanto a estructuras. Su base de datos se modifico. `datos/` contiene la copia de la base existente. La demostración usa otra base, `.demo-data/`, para separar las pruebas de tus registros.
 
 ## Demostración
 
@@ -22,16 +22,6 @@ Abre `http://localhost:3000/login.html`.
 | Proveedor | proveedor.demo | SoniDemo!2026-Proveedor |
 
 Estas cuentas se crean solo con `npm run demo` sobre la base integrada de demostración. No deben utilizarse en un despliegue real. El servidor escucha únicamente en este equipo.
-
-## Tu base y tu primera cuenta administradora
-
-1. Detén la demostración con Ctrl+C.
-2. Ejecuta `npm run crear-cuenta`. Escribe tu nombre, usuario, correo y contraseña (mínimo 12 caracteres). La contraseña no se muestra al escribirla.
-3. Ejecuta `npm start` y entra desde **Administrador**.
-
-No ejecutes la herramienta y el servidor a la vez sobre la misma base PGlite. La primera cuenta se crea desde esta herramienta local de confianza: el registro público nunca concede administración sin aprobación. Las cuentas antiguas no reciben privilegios automáticamente.
-
-En este equipo las dependencias se enlazan con las del proyecto original. En otro equipo usa `npm install`. El ZIP excluye bases de datos, credenciales reales y dependencias. Si trabajas desde el ZIP, copia la carpeta `datos` del proyecto original dentro de esta carpeta antes del primer arranque para conservar sus registros; si no, se creará una base nueva.
 
 ## Registro y acceso
 
