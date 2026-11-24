@@ -13,8 +13,10 @@
     "@node-rs/argon2": "2.2.2",
     "bootstrap": "5.3.3",
     "bootstrap-icons": "1.11.3",
+    "docx": "9.16.0",
     "dotenv": "16.4.5",
     "express": "4.21.2",
+    "image-size": "2.1.0",
     "pg": "8.13.1"
   }
 }

@@ -2,6 +2,7 @@
 const $=id=>document.getElementById(id),page=document.body.dataset.shop;
 const money=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(Number(n));
 let catalog=[],cart={items:[],unidades:0,total:0},selectedCategory='Todas',busy=false,paymentId=null;
+let downloadingCatalog = false;
 const node=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
 async function api(url,body){const r=await fetch('/api/portal/cliente/'+url,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});const d=await r.json();if(r.status===401){location.assign('/login.html');throw Error('Inicia sesión para continuar.');}if(!r.ok)throw Error(d.error||'No pudimos completar la operación.');return d;}
 function notice(text,error=false){const e=$('shop-status');e.textContent=text;e.className='notice'+(error?' error':'');e.hidden=false;e.setAttribute('role',error?'alert':'status');}
@@ -14,9 +15,41 @@ function garment(name,color='Oliva'){
  paths.forEach((d,i)=>{const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',d);p.setAttribute('fill',i===0?(colors[color]||'#939982'):'none');p.setAttribute('stroke',i===0?'#3e48382d':'#ffffff60');p.setAttribute('stroke-width',i===0?'1.5':'2');svg.append(p);});return svg;
 }
 async function changeVariant(id,qty){if(busy)return;busy=true;try{cart=await api('carrito',{id_variante:id,cantidad:qty});count();if(page==='carrito')renderCart();return true;}catch(e){notice(e.message,true);return false;}finally{busy=false;}}
+function catalogFilters(){
+ return { categoria: selectedCategory === 'Todas' ? '' : selectedCategory, q: $('search').value };
+}
+async function downloadCatalog(){
+ if(downloadingCatalog)return;
+ const button=$('download-catalog'), status=$('catalog-download-status');
+ const query=new URLSearchParams(catalogFilters());
+ downloadingCatalog=true;
+ button.disabled=true;
+ button.textContent='Generando Word…';
+ status.textContent='';
+ try{
+  const response=await fetch(`/api/portal/cliente/catalogo/word?${query}`);
+  if(response.status===401){location.assign('/login.html');return;}
+  if(response.status===404)throw Error('No hay prendas que coincidan con estos filtros.');
+  if(!response.ok)throw Error('No se pudo descargar el catálogo. Inténtalo de nuevo.');
+  const url=URL.createObjectURL(await response.blob());
+  const link=node('a');
+  link.href=url;
+  link.download='Catalogo-SoniClothes.docx';
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+ }catch(error){
+  status.textContent=error instanceof TypeError ? 'No se pudo descargar el catálogo. Inténtalo de nuevo.' : error.message;
+ }finally{
+  downloadingCatalog=false;
+  button.textContent='Descargar en Word';
+  button.disabled=!agruparPrendas(catalog,catalogFilters()).length;
+ }
+}
 function renderProducts(){
- const q=$('search').value.toLocaleLowerCase('es'),group=new Map();catalog.forEach(v=>{if(!group.has(v.id_producto))group.set(v.id_producto,[]);group.get(v.id_producto).push(v);});
- const groups=[...group.values()].filter(v=>(selectedCategory==='Todas'||v[0].categoria===selectedCategory)&&`${v[0].producto} ${v[0].categoria} ${v[0].marca||''}`.toLocaleLowerCase('es').includes(q));
+ const groups=agruparPrendas(catalog,catalogFilters());
+ $('download-catalog').disabled=downloadingCatalog||!groups.length;
  $('products').replaceChildren();$('product-count').textContent=`${groups.length} prendas`;
  if(!groups.length){$('products').append(node('div','No encontramos prendas con estos filtros. Prueba otra búsqueda.','shop-empty'));return;}
  groups.forEach(variants=>{
@@ -61,6 +94,7 @@ function renderPayment(){
  cart=await api('carrito');count();
  if(page==='tienda'){
   catalog=await api('catalogo');$('hero-garment').append(garment('Camisa Oxford','Oliva'));
+  $('download-catalog').onclick=downloadCatalog;
   ['Todas',...new Set(catalog.map(v=>v.categoria))].forEach(category=>{const b=node('button',category);b.type='button';b.setAttribute('aria-pressed',String(category==='Todas'));b.onclick=()=>{selectedCategory=category;document.querySelectorAll('#categories button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));renderProducts();};$('categories').append(b);});$('search').oninput=renderProducts;renderProducts();
  }else if(page==='carrito')renderCart();
  else{
