@@ -1,12 +1,26 @@
 const {spawn}=require('node:child_process');
+const {randomBytes,scryptSync}=require('node:crypto');
+const {PGlite}=require('@electric-sql/pglite');
 const fs=require('node:fs');const os=require('node:os');const path=require('node:path');const assert=require('node:assert/strict');
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'soniclothes-test-'));
 const port='3179',base='http://127.0.0.1:'+port;
-const child=spawn(process.execPath,['servidor.js'],{cwd:__dirname,env:{...process.env,DB_MODE:'demo',SONICLOTHES_DEMO:'1',PORT:port,DEMO_DATA_DIR:dir},stdio:['ignore','pipe','pipe']});
-let errors='';child.stderr.on('data',s=>errors+=s);
+Object.assign(process.env,{DB_MODE:'demo',SONICLOTHES_DEMO:'1',DEMO_DATA_DIR:dir});
+const db=require('./base');
+let child,errors='';
 const accounts={admin:{cookie:''},client:{cookie:''},provider:{cookie:''},other:{cookie:''},newProvider:{cookie:''},newAdmin:{cookie:''}};
+const adminPassword='SoniDemo!2026-Admin';
+const providerPassword='SoniDemo!2026-Proveedor';
+const inactivePassword='Cuenta-inactiva-para-pruebas';
 let assertions=0;
 function equal(a,b){assert.equal(a,b);assertions++;}
+function legacyHash(password){
+ const salt=randomBytes(16).toString('hex');
+ return `scrypt:${salt}:${scryptSync(password,salt,32).toString('hex')}`;
+}
+async function stopServer(){
+ if(!child||child.exitCode!==null||child.signalCode!==null)return;
+ await new Promise(resolve=>{child.once('exit',resolve);child.kill('SIGTERM');});
+}
 async function req(url,actor=null,body,headers={}){
  const r=await fetch(base+url,{method:body===undefined?'GET':'POST',redirect:'manual',headers:{'Content-Type':'application/json',...(actor?{Cookie:actor.cookie}:{}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
  const c=r.headers.get('set-cookie');if(c&&actor)actor.cookie=c.split(';')[0];
@@ -16,22 +30,46 @@ async function req(url,actor=null,body,headers={}){
 const login=(actor,usuario,contrasena,rol)=>req('/api/login',actor,{usuario,contrasena,rol});
 const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+suffix,correo:suffix+'@example.com',rol,contrasena:'FraseSegura!2026-'+suffix,confirmacion:'FraseSegura!2026-'+suffix,...(rol==='proveedor'?{nombre_comercial:'Negocio '+suffix}:{})});
 (async()=>{try{
+ const inactiveHash=legacyHash(inactivePassword);
+ try{
+  await db.iniciar();
+  await db.query("INSERT INTO usuario(nombre,nombre_usuario,hash_contrasena,rol) VALUES('Administración demo','admin.demo',$1,'administrador')",[legacyHash(adminPassword)]);
+  await db.query(`WITH titular AS (INSERT INTO cliente(nombre) VALUES('Cuenta inactiva') RETURNING id_cliente)
+   INSERT INTO usuario(nombre,nombre_usuario,hash_contrasena,rol,activo,id_cliente)
+   SELECT 'Cuenta inactiva','inactivo.legacy',$1,'cliente',false,id_cliente FROM titular`,[inactiveHash]);
+  await db.query(`WITH cuenta AS (
+    INSERT INTO usuario(nombre,nombre_usuario,hash_contrasena,rol,id_proveedor)
+    SELECT 'Textiles Norte','proveedor.demo',$1,'proveedor',id_proveedor
+    FROM proveedor WHERE correo='norte@example.com' RETURNING id_usuario
+   )
+   INSERT INTO solicitud_acceso(nombre,nombre_usuario,correo,hash_contrasena,rol,estado,id_usuario_creado)
+   SELECT 'Textiles Norte','proveedor.demo','norte@example.com',$1,'proveedor','aprobada',id_usuario FROM cuenta`,[legacyHash(providerPassword)]);
+ }finally{await db.cerrar();}
+ child=spawn(process.execPath,['servidor.js'],{cwd:__dirname,env:{...process.env,PORT:port},stdio:['ignore','pipe','pipe']});
+ child.stderr.on('data',s=>errors+=s);
  await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('No inició: '+errors)),60000);child.stdout.on('data',s=>{if(String(s).includes('SoniClothes listo')){clearTimeout(t);resolve();}});child.on('exit',c=>{clearTimeout(t);reject(Error('Terminó '+c+': '+errors));});});
  equal((await req('/login.html')).status,200);equal((await req('/login.css')).status,200);equal((await req('/login.js')).status,200);
  equal((await req('/api/catalogo')).status,401);equal((await req('/ventas.html')).status,302);
  equal((await login(accounts.admin,'admin.demo','incorrecta','administrador')).status,401);
- equal((await login(accounts.client,'admin.demo','SoniDemo!2026-Admin','cliente')).status,401);
+ equal((await login(accounts.client,'admin.demo',adminPassword,'cliente')).status,401);
  equal((await login(accounts.admin,'x','x','administrador')).status,401);
- let r=await login(accounts.admin,'admin.demo','SoniDemo!2026-Admin','administrador');equal(r.status,200);equal(r.data.destino,'/ventas.html');assert(r.headers.get('set-cookie').includes('HttpOnly'));assertions++;
+ equal((await login(null,'inactivo.legacy',inactivePassword,'cliente')).status,401);
+ const [firstLogin,secondLogin]=await Promise.all([
+  login(accounts.admin,'admin.demo',adminPassword,'administrador'),
+  login(null,'admin.demo',adminPassword,'administrador')
+ ]);
+ equal(firstLogin.status,200);equal(secondLogin.status,200);equal(firstLogin.data.destino,'/ventas.html');assert(firstLogin.headers.get('set-cookie').includes('HttpOnly'));assertions++;
+ equal((await login(accounts.admin,'admin.demo',adminPassword,'administrador')).status,200);
+ equal((await login(null,'admin.demo','incorrecta','administrador')).status,401);
  equal((await login(accounts.client,'cliente.demo','SoniDemo!2026-Cliente','cliente')).status,200);
- equal((await login(accounts.provider,'proveedor.demo','SoniDemo!2026-Proveedor','proveedor')).status,200);
+ equal((await login(accounts.provider,'proveedor.demo',providerPassword,'proveedor')).status,200);
  equal((await req('/api/solicitudes',accounts.client)).status,403);equal((await req('/api/proveedores',accounts.provider)).status,403);
  equal((await req('/api/ventas',accounts.client,{id_metodo_pago:1,items:[]})).status,403);
  equal((await req('/api/portal/proveedor',accounts.client)).status,403);equal((await req('/api/portal/cliente',accounts.provider)).status,403);
  equal((await req('/ventas.html',accounts.client)).headers.get('location'),'/tienda.html');
  equal((await req('/api/login',null,{usuario:'admin.demo',contrasena:'SoniDemo!2026-Admin',rol:'administrador'},{Origin:'https://ajeno.example'})).status,403);
  // Alta cliente: sin aprobación y sesión inmediata.
- const b=registration('cliente-nuevo','cliente');r=await req('/api/registro',accounts.other,b);equal(r.status,201);equal(r.data.destino,'/tienda.html');
+ const b=registration('cliente-nuevo','cliente');let r=await req('/api/registro',accounts.other,b);equal(r.status,201);equal(r.data.destino,'/tienda.html');
  equal((await req('/api/sesion',accounts.other)).data.rol,'cliente');equal((await req('/api/portal/cliente',accounts.other)).data.ventas.length,0);
  equal((await req('/api/registro',null,b)).status,409);
  equal((await req('/api/registro',null,{...registration('sin-validar','cliente'),rol:'superadmin'})).status,400);
@@ -153,5 +191,18 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  for(const html of ['/cliente.html','/portal.css','/portal.js'])equal((await req(html,accounts.client)).status,200);
  for(const html of ['/ventas.html','/revision.html','/ingresos.html','/solicitudes.html'])equal((await req(html,accounts.admin)).status,200);
  equal((await req('/api/logout',accounts.client,{})).status,200);equal((await req('/api/portal/cliente',accounts.client)).status,401);
- console.log(`OK: ${assertions} comprobaciones. Registro de cliente inmediato; proveedores pendientes; aprobación/rechazo; bloqueo de escalada; aislamiento entre cuentas; carrito persistente; pago aprobado/rechazado; prevención de doble pago; totales de servidor; reversión por cambio de stock; publicación e ingresos por proveedor.`);
- }catch(e){console.error(e);console.error(errors);process.exitCode=1;}finally{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)resolve();else child.once('exit',resolve);});fs.rmSync(dir,{recursive:true,force:true});}})();
+ await stopServer();
+ const persisted=new PGlite(dir);
+ try{
+  const {rows}=await persisted.query('SELECT nombre_usuario,hash_contrasena FROM usuario WHERE nombre_usuario IN ($1,$2,$3,$4,$5)',
+   ['admin.demo','inactivo.legacy','proveedor.demo',b.usuario,supplier.usuario]);
+  const hashes=new Map(rows.map(row=>[row.nombre_usuario,row.hash_contrasena]));
+  for(const usuario of ['admin.demo','proveedor.demo',b.usuario,supplier.usuario]){
+   equal(hashes.get(usuario)?.startsWith('$argon2id$v=19$m=19456,t=2,p=1$'),true);
+  }
+  equal(hashes.get('inactivo.legacy'),inactiveHash);
+  const request=await persisted.query("SELECT hash_contrasena FROM solicitud_acceso WHERE nombre_usuario=$1 AND estado='aprobada'",['proveedor.demo']);
+  equal(request.rows[0]?.hash_contrasena,hashes.get('proveedor.demo'));
+ }finally{await persisted.close();}
+ console.log(`OK: ${assertions} comprobaciones. Argon2id y migración de scrypt; registro de cliente inmediato; proveedores pendientes; aprobación/rechazo; bloqueo de escalada; aislamiento entre cuentas; carrito persistente; pago aprobado/rechazado; prevención de doble pago; totales de servidor; reversión por cambio de stock; publicación e ingresos por proveedor.`);
+ }catch(e){console.error(e);console.error(errors);process.exitCode=1;}finally{await stopServer();fs.rmSync(dir,{recursive:true,force:true});}})();
