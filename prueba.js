@@ -50,6 +50,14 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  await new Promise((resolve,reject)=>{const t=setTimeout(()=>reject(Error('No inició: '+errors)),60000);child.stdout.on('data',s=>{if(String(s).includes('SoniClothes listo')){clearTimeout(t);resolve();}});child.on('exit',c=>{clearTimeout(t);reject(Error('Terminó '+c+': '+errors));});});
  equal((await req('/login.html')).status,200);equal((await req('/login.css')).status,200);equal((await req('/login.js')).status,200);
  equal((await req('/api/catalogo')).status,401);equal((await req('/ventas.html')).status,302);
+ equal((await req('/')).headers.get('location'),'/tienda.html');
+ for(const url of ['/tienda.html','/carrito.html','/app.css','/app-shell.js','/tienda.js','/tienda.css','/catalogo-prendas.js'])equal((await req(url)).status,200);
+ equal((await req('/pago.html')).headers.get('location'),'/login.html?continuar=pago');
+ equal((await req('/cliente.html')).headers.get('location'),'/login.html?continuar=compras');
+ equal((await req('/api/portal/cliente')).status,401);
+ equal((await req('/api/portal/cliente/carrito')).status,401);
+ equal((await req('/api/portal/cliente/carrito/transferir',null,{})).status,401);
+ equal((await req('/api/portal/cliente/checkout',null,{})).status,401);
  equal((await login(accounts.admin,'admin.demo','incorrecta','administrador')).status,401);
  equal((await login(accounts.client,'admin.demo',adminPassword,'cliente')).status,401);
  equal((await login(accounts.admin,'x','x','administrador')).status,401);
@@ -63,6 +71,8 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  equal((await login(null,'admin.demo','incorrecta','administrador')).status,401);
  equal((await login(accounts.client,'cliente.demo','SoniDemo!2026-Cliente','cliente')).status,200);
  equal((await login(accounts.provider,'proveedor.demo',providerPassword,'proveedor')).status,200);
+ equal((await req('/',accounts.admin)).headers.get('location'),'/ventas.html');
+ equal((await req('/',accounts.provider)).headers.get('location'),'/proveedor.html');
  equal((await req('/api/solicitudes',accounts.client)).status,403);equal((await req('/api/proveedores',accounts.provider)).status,403);
  equal((await req('/api/ventas',accounts.client,{id_metodo_pago:1,items:[]})).status,403);
  equal((await req('/api/portal/proveedor',accounts.client)).status,403);equal((await req('/api/portal/cliente',accounts.provider)).status,403);
@@ -76,9 +86,11 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  equal((await req('/api/registro',null,{...registration('corta','cliente'),contrasena:'123',confirmacion:'123'})).status,400);
  // Administración consulta el directorio y no registra ventas.
  const cat=(await req('/api/portal/cliente/catalogo',accounts.client)).data;
+ equal((await req('/api/portal/cliente/catalogo')).data.length,cat.length);
  const catalogWord='/api/portal/cliente/catalogo/word';
  const downloadWord=(query='',actor=accounts.client)=>fetch(base+catalogWord+query,{headers:actor?{Cookie:actor.cookie}:{}});
- equal((await downloadWord('',null)).status,401);
+ const guestCatalog=await downloadWord('',null);
+ equal(guestCatalog.status,200);await guestCatalog.arrayBuffer();
  equal((await downloadWord('',accounts.provider)).status,403);
  equal((await downloadWord('',accounts.admin)).status,403);
  equal((await downloadWord('?q=uno&q=dos')).status,400);
@@ -159,6 +171,34 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  equal((await decidir(concurrentKey,'aprobada')).status,200);
  equal((await req('/api/portal/cliente/carrito',accounts.client)).data.items.length,0);
  equal((await req('/api/portal/cliente/checkout',accounts.client,{id_solicitud:'________-____-4___-8___-____________'})).status,400);
+
+ // El navegador envía cantidades finales al transferir su selección, incluso si reintenta.
+ const transfer='/api/portal/cliente/carrito/transferir';
+ const variant=cat[0].id_variante;
+ equal((await req('/api/portal/cliente/carrito',accounts.other,{id_variante:variant,cantidad:1})).status,200);
+ const {cuenta}=(await req('/api/portal/cliente/carrito',accounts.other)).data;
+ const items=[{id_variante:variant,cantidad:3,precio_venta:0.01}];
+ const seleccion={cuenta,items};
+ equal((await req(transfer,accounts.provider,seleccion)).status,403);
+ equal((await req(transfer,accounts.client,seleccion)).status,409);
+ equal((await req(transfer,accounts.other,{cuenta,items:[...items,...items]})).status,400);
+ equal((await req(transfer,accounts.other,{cuenta,items:[{id_variante:variant,cantidad:201}]})).status,400);
+ const transferred=await Promise.all([req(transfer,accounts.other,seleccion),req(transfer,accounts.other,seleccion)]);
+ for(const result of transferred){
+  equal(result.status,200);equal(result.data.unidades,3);equal(result.data.ajustado,false);
+  equal(result.data.total,Number(cat[0].precio_venta)*3);
+ }
+ equal((await req('/api/portal/cliente/carrito',accounts.other)).data.unidades,3);
+ equal((await req('/api/portal/cliente/carrito',accounts.client)).data.unidades,0);
+ const disponibles=(await req('/api/portal/cliente/catalogo')).data.find(p=>p.id_variante===variant).existencia;
+ const ajustable={cuenta,items:[{id_variante:variant,cantidad:disponibles+3},{id_variante:999999,cantidad:1}]};
+ const guestPayment=randomUUID();
+ equal((await req('/api/portal/cliente/checkout',accounts.other,{id_solicitud:guestPayment})).status,202);
+ equal((await req(transfer,accounts.other,ajustable)).status,409);
+ equal((await req('/api/portal/cliente/carrito',accounts.other)).data.unidades,3);
+ equal((await decidir(guestPayment,'rechazada')).status,200);
+ const adjusted=await req(transfer,accounts.other,ajustable);
+ equal(adjusted.status,200);equal(adjusted.data.unidades,disponibles);equal(adjusted.data.ajustado,true);
  // Proveedor pendiente: no sesión, ningún privilegio, aprobación exclusiva del admin.
  const supplier=registration('nuevo-proveedor','proveedor');r=await req('/api/registro',accounts.newProvider,supplier);equal(r.status,202);equal(accounts.newProvider.cookie,'');
  equal((await login(accounts.newProvider,supplier.usuario,supplier.contrasena,'proveedor')).status,401);
@@ -184,6 +224,9 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  const displayed = await fetch(base + foto, {headers:{Cookie:accounts.client.cookie}});
  equal(displayed.headers.get('content-type'), 'image/png');
  equal(Buffer.from(await displayed.arrayBuffer()).equals(png), true);
+ const guestPhoto=await fetch(base+foto);
+ equal(guestPhoto.headers.get('content-type'),'image/png');
+ equal(Buffer.from(await guestPhoto.arrayBuffer()).equals(png),true);
  const filter=new URLSearchParams({categoria:item.categoria,q:item.producto.toLocaleUpperCase('es')});
  const filteredCatalog=await downloadWord('?'+filter);
  equal(filteredCatalog.status,200);
@@ -199,11 +242,19 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  const revision=(await req('/api/revision',accounts.admin)).data;
  const nueva=revision.find(p=>p.nombre==='Prenda pendiente');
  equal(nueva.estado,'pendiente');
+ const proposedPhoto=await fetch(base+'/api/portal/proveedor/foto/'+nueva.id_producto,{
+  method:'PUT',headers:{Cookie:accounts.newProvider.cookie,'Content-Type':'image/png'},body:png
+ });
+ equal(proposedPhoto.status,200);
+ const {foto:fotoPendiente}=await proposedPhoto.json();
+ equal((await req(fotoPendiente)).status,404);
+ equal((await req('/api/portal/cliente/catalogo')).data.some(p=>p.id_producto===nueva.id_producto),false);
  equal((await req('/api/portal/cliente/catalogo',accounts.client)).data.some(p=>p.id_producto===nueva.id_producto),false);
  const proposedProduct='?'+new URLSearchParams({q:nueva.nombre});
  equal((await downloadWord(proposedProduct)).status,404);
  equal((await req('/api/revision/'+nueva.id_producto,accounts.newProvider,{estado:'aprobada'})).status,403);
  equal((await req('/api/revision/'+nueva.id_producto,accounts.admin,{estado:'aprobada'})).status,200);
+ equal((await req(fotoPendiente)).status,200);
  const publicadas=(await req('/api/portal/cliente/catalogo',accounts.client)).data.filter(p=>p.id_producto===nueva.id_producto);
  equal(publicadas.length,2);equal(publicadas.reduce((sum,p)=>sum+Number(p.existencia),0),7);
  const publishedCatalog=await downloadWord(proposedProduct);
@@ -220,6 +271,7 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  await stopServer();
  const persisted=new PGlite(dir);
  try{
+  equal((await persisted.query("SELECT table_name FROM information_schema.tables WHERE table_name='carrito_visitante'")).rows.length,0);
   const {rows}=await persisted.query('SELECT nombre_usuario,hash_contrasena FROM usuario WHERE nombre_usuario IN ($1,$2,$3,$4,$5)',
    ['admin.demo','inactivo.legacy','proveedor.demo',b.usuario,supplier.usuario]);
   const hashes=new Map(rows.map(row=>[row.nombre_usuario,row.hash_contrasena]));

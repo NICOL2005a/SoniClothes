@@ -90,6 +90,15 @@ app.post('/api/login',async(req,res,next)=>{
  }catch(e){next(e);}
 });
 const publicos=new Set(['/login.html','/login.css','/login.js']);
+const tiendaPublica=new Set([
+ '/tienda.html','/carrito.html','/app.css','/app-shell.js','/tienda.css','/tienda.js','/catalogo-prendas.js',
+ '/api/portal/cliente/catalogo','/api/portal/cliente/catalogo/word'
+]);
+const rutaFoto=req=>/^\/fotos\/\d+\/\d+$/.test(req.path);
+const esLectura=req=>req.method==='GET'||req.method==='HEAD';
+const permiteVisitante=req=>esLectura(req)&&(
+ req.path==='/'||req.path==='/index.html'||tiendaPublica.has(req.path)||rutaFoto(req)
+);
 app.use(async(req,res,next)=>{
  if(publicos.has(req.path))return next();
  try {
@@ -99,15 +108,19 @@ app.use(async(req,res,next)=>{
    if(u?.activo&&roles.includes(u.rol)){req.usuario=u;return next();}
   }
   if(id){sesiones.delete(id);clearCookie(req,res);}
+  if(permiteVisitante(req))return next();
   if(req.path.startsWith('/api/'))return res.status(401).json({error:'Tu sesión terminó. Inicia sesión para continuar.'});
+  if(req.path==='/pago.html')return res.redirect('/login.html?continuar=pago');
+  if(req.path==='/cliente.html')return res.redirect('/login.html?continuar=compras');
   res.redirect('/login.html');
  }catch(e){next(e);}
 });
 app.get('/api/sesion',(req,res)=>res.json(sanitize(req.usuario)));
 app.post('/api/logout',(req,res)=>{sesiones.delete(token(req));clearCookie(req,res);res.json({ok:true});});
+app.get(['/','/index.html'],(req,res)=>res.redirect(req.usuario ? destinos[req.usuario.rol] : '/tienda.html'));
 // Antes de servir HTML o API, se comprueba el acceso en el servidor.
 app.use((req,res,next)=>{
- if(publicos.has(req.path))return next();
+ if(publicos.has(req.path)||!req.usuario&&permiteVisitante(req))return next();
  const rol=req.usuario.rol;
  const portal=rol==='cliente'?'/cliente.html':'/proveedor.html';
  if(rol==='administrador') {
@@ -121,9 +134,9 @@ app.use((req,res,next)=>{
  if(rol==='proveedor' && ((req.method==='GET'&&['/proveedores.html','/supplier.css'].includes(req.path)) ||
   (req.method==='POST'&&req.path==='/api/cuestionarios')))return next();
  const assets=['/portal.css','/portal.js','/app.css','/app-shell.js','/tienda.css','/tienda.js'];
- const api=rol==='cliente'?/^\/api\/portal\/cliente(?:\/ventas\/\d+|\/catalogo(?:\/word)?|\/carrito|\/pagos|\/checkout)?$/:/^\/api\/portal\/proveedor$/;
+ const api=rol==='cliente'?/^\/api\/portal\/cliente(?:\/ventas\/\d+|\/catalogo(?:\/word)?|\/carrito(?:\/transferir)?|\/pagos|\/checkout)?$/:/^\/api\/portal\/proveedor$/;
  const paginasCliente=['/tienda.html','/carrito.html','/pago.html'];
- if((req.method==='GET' && /^\/fotos\/\d+\/\d+$/.test(req.path))||(rol==='proveedor' && req.method==='PUT' && /^\/api\/portal\/proveedor\/foto\/\d+$/.test(req.path)))return next();
+ if((esLectura(req) && rutaFoto(req))||(rol==='proveedor' && req.method==='PUT' && /^\/api\/portal\/proveedor\/foto\/\d+$/.test(req.path)))return next();
  if(req.path===portal||assets.includes(req.path)||(rol==='cliente'&&(paginasCliente.includes(req.path)||req.path==='/catalogo-prendas.js'))||api.test(req.path))return next();
  if(req.path.startsWith('/api/'))return res.status(403).json({error:'Tu cuenta no tiene acceso a esta sección.'});
  return res.redirect(destinos[rol]);
@@ -161,7 +174,7 @@ ruta('get','/api/proveedores',async(req,res)=>res.json((await db.query('SELECT p
 app.use((e,req,res,next)=>{ console.error(e.message);res.status(e.status||500).json({error:e.status?e.message:'No se pudo completar la operación.'}); });
 db.iniciar().then(async()=>{
  if(process.env.SONICLOTHES_DEMO==='1')await require('./demo').preparar(db);
- const server=app.listen(process.env.PORT||3000,'127.0.0.1',()=>console.log(`SoniClothes listo: http://localhost:${process.env.PORT||3000}/login.html`));
+ const server=app.listen(process.env.PORT||3000,'127.0.0.1',()=>console.log(`SoniClothes listo: http://localhost:${process.env.PORT||3000}/`));
  async function terminar(){server.close();try{await db.cerrar();}finally{process.exit(0);}}
  process.on('SIGTERM',terminar);process.on('SIGINT',terminar);
 }).catch(e=>{console.error('No se pudo iniciar:',e.message);process.exit(1);});
