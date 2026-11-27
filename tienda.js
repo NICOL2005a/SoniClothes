@@ -2,12 +2,22 @@ const { agruparPrendas } = require('./public/catalogo-prendas');
 const { crearCatalogoWord } = require('./catalogo-word');
 
 const fail=(message,status=400)=>Object.assign(Error(message),{status});
-const idValido=id=>/^\d+$/.test(String(id));
+const idValido=id=>(typeof id==='string'||Number.isSafeInteger(id))&&/^\d{1,19}$/.test(String(id))&&BigInt(id)<=9223372036854775807n;
+async function tienePagoPendiente(db,user){
+ return (await db.query("SELECT 1 FROM solicitud_pago WHERE id_usuario=$1 AND estado='pendiente'",[user])).rows.length>0;
+}
 async function cart(db,user){
  const items=(await db.query('SELECT c.id_variante,c.cantidad,p.id_producto,p.nombre,p.precio_venta,p.marca,v.talla,v.color,COALESCE(i.existencia,0) AS existencia FROM carrito_item c JOIN variante_producto v USING(id_variante) JOIN producto p USING(id_producto) LEFT JOIN inventario i USING(id_variante) WHERE c.id_usuario=$1 ORDER BY p.nombre,v.id_variante',[user])).rows;
  const totalCentavos=items.reduce((s,p)=>s+Math.round(Number(p.precio_venta)*100)*p.cantidad,0);
- const pendiente=(await db.query("SELECT 1 FROM solicitud_pago WHERE id_usuario=$1 AND estado='pendiente'",[user])).rows.length>0;
- return {items,total:totalCentavos/100,unidades:items.reduce((s,p)=>s+p.cantidad,0),pendiente};
+ return {items,total:totalCentavos/100,unidades:items.reduce((s,p)=>s+p.cantidad,0),pendiente:await tienePagoPendiente(db,user)};
+}
+async function guardarCantidad(db,user,id,cantidad){
+ await db.query('INSERT INTO carrito_item(id_usuario,id_variante,cantidad) VALUES($1,$2,$3) ON CONFLICT(id_usuario,id_variante) DO UPDATE SET cantidad=EXCLUDED.cantidad',[user,id,cantidad]);
+}
+function cambioCarrito(body){
+ const {id_variante,cantidad}=body||{};
+ if(!idValido(id_variante)||!Number.isSafeInteger(cantidad)||cantidad<0||cantidad>100)throw fail('Revisa la variante y la cantidad (de 0 a 100).');
+ return {id_variante:String(BigInt(id_variante)),cantidad};
 }
 async function catalogo(db){
  return (await db.query(`SELECT id_producto,id_variante,producto,marca,descripcion,precio_venta,categoria,talla,color,COALESCE(existencia,0) AS existencia,
@@ -40,21 +50,56 @@ function instalar(app,db,ruta){
    res.attachment('Catalogo-SoniClothes.docx').send(archivo);
   } catch (error) { next(error); }
  });
- ruta('get','/api/portal/cliente/carrito',async(req,res)=>res.json(await cart(db,req.usuario.id_usuario)));
+ ruta('get','/api/portal/cliente/carrito',async(req,res)=>{
+  const user=req.usuario.id_usuario;
+  res.json({...await cart(db,user),cuenta:String(user)});
+ });
+ ruta('post','/api/portal/cliente/carrito/transferir',async(req,res)=>{
+  const user=req.usuario.id_usuario;
+  const {cuenta,items}=req.body||{};
+  if(cuenta!==String(user))throw fail('Cambió la cuenta activa. Vuelve a entrar para continuar con tu selección.',409);
+  if(!Array.isArray(items)||!items.length||items.length>100)throw fail('Revisa las prendas de tu selección.');
+  const objetivos=new Map();
+  for(const item of items){
+   const {id_variante,cantidad}=item||{};
+   if(!idValido(id_variante)||!Number.isSafeInteger(cantidad)||cantidad<1||cantidad>200)throw fail('Revisa las cantidades de tu selección.');
+   const id=String(BigInt(id_variante));
+   if(objetivos.has(id))throw fail('La selección contiene variantes repetidas.');
+   objetivos.set(id,cantidad);
+  }
+  await db.query('BEGIN');
+  try{
+   await db.query('SELECT id_usuario FROM usuario WHERE id_usuario=$1 FOR UPDATE',[user]);
+   const anterior=await cart(db,user);
+   if(anterior.pendiente)throw fail('Tu carrito está pendiente de revisión. Consulta Mis compras para poder agregar tu selección.',409);
+   const cantidades=new Map(anterior.items.map(item=>[String(item.id_variante),item.cantidad]));
+   const {rows}=await db.query('SELECT id_variante,existencia FROM vista_catalogo_prendas WHERE id_variante=ANY($1::bigint[])',[[...objetivos.keys()]]);
+   const existencias=new Map(rows.map(item=>[String(item.id_variante),Number(item.existencia)]));
+   let ajustado=false;
+   for(const [id,objetivo] of objetivos){
+    const actual=cantidades.get(id)||0;
+    const cantidad=Math.min(objetivo,100,existencias.get(id)||0);
+    if(cantidad<objetivo)ajustado=true;
+    if(cantidad>actual)await guardarCantidad(db,user,id,cantidad);
+   }
+   const result=await cart(db,user);
+   await db.query('COMMIT');
+   res.json({...result,ajustado});
+  }catch(error){await db.query('ROLLBACK');throw error;}
+ });
  ruta('post','/api/portal/cliente/carrito',async(req,res)=>{
-  const {id_variante,cantidad}=req.body||{};
-  if(!idValido(id_variante)||!Number.isSafeInteger(cantidad)||cantidad<0||cantidad>100)throw fail('Revisa la variante y la cantidad (de 0 a 100).');
+  const {id_variante,cantidad}=cambioCarrito(req.body);
   await db.query('BEGIN');
   try {
   await db.query('SELECT id_usuario FROM usuario WHERE id_usuario=$1 FOR UPDATE',[req.usuario.id_usuario]);
-  if((await db.query("SELECT 1 FROM solicitud_pago WHERE id_usuario=$1 AND estado='pendiente'",[req.usuario.id_usuario])).rows.length)
+  if(await tienePagoPendiente(db,req.usuario.id_usuario))
    throw fail('Tu carrito está pendiente de revisión. Consulta Mis compras.',409);
   if(cantidad===0){await db.query('DELETE FROM carrito_item WHERE id_usuario=$1 AND id_variante=$2',[req.usuario.id_usuario,id_variante]);}
   else {
    const p=(await db.query('SELECT existencia FROM vista_catalogo_prendas WHERE id_variante=$1',[id_variante])).rows[0];
    if(!p)throw fail('Esta prenda ya no está disponible.',404);
    if(Number(p.existencia)<cantidad)throw fail('No quedan suficientes unidades de esta talla y color.',409);
-   await db.query('INSERT INTO carrito_item(id_usuario,id_variante,cantidad) VALUES($1,$2,$3) ON CONFLICT(id_usuario,id_variante) DO UPDATE SET cantidad=EXCLUDED.cantidad',[req.usuario.id_usuario,id_variante,cantidad]);
+   await guardarCantidad(db,req.usuario.id_usuario,id_variante,cantidad);
   }
   const result=await cart(db,req.usuario.id_usuario);
   await db.query('COMMIT');res.json(result);
@@ -75,7 +120,7 @@ function instalar(app,db,ruta){
    await db.query('SELECT id_usuario FROM usuario WHERE id_usuario=$1 FOR UPDATE',[user]);
    const anterior=(await db.query('SELECT id_solicitud,estado,total FROM solicitud_pago WHERE id_usuario=$1 AND id_solicitud=$2',[user,b.id_solicitud])).rows[0];
    if(anterior){await db.query('COMMIT');return res.json(anterior);}
-   if((await db.query("SELECT 1 FROM solicitud_pago WHERE id_usuario=$1 AND estado='pendiente'",[user])).rows.length)
+   if(await tienePagoPendiente(db,user))
     throw fail('Ya tienes una solicitud pendiente. Consulta Mis compras.',409);
    const c=await cart(db,user);
    if(!c.items.length||c.items.length>100||c.total<=0)throw fail('Revisa las prendas y el total de tu carrito.');

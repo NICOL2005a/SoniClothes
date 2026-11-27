@@ -13,7 +13,7 @@ npm install
 npm run demo
 ```
 
-Abre `http://localhost:3000/login.html`.
+Abre `http://localhost:3000/` para explorar la tienda. El enlace **Iniciar sesión** abre el acceso para clientes, proveedores y administradores.
 
 | Acceso | Usuario | Contraseña de demostración |
 |---|---|---|
@@ -73,7 +73,7 @@ El trabajo se entrega para uso y pruebas locales. Para Internet se necesita aloj
 
 ## Tienda y pago simulado
 
-El cliente entra al catálogo después de iniciar sesión o registrarse. Puede filtrar por categoría, buscar, elegir talla y color y añadir prendas al carrito. El carrito vive en la base, separado por cuenta. Se puede cambiar la cantidad, eliminar prendas y consultar el total antes de pagar.
+El catálogo está disponible sin cuenta desde la portada. Los visitantes pueden buscar prendas, elegir talla y color y agregar artículos al carrito. La selección se guarda en el almacenamiento local de ese navegador durante siete días desde la última edición. Al pulsar **Continuar al pago**, se solicita iniciar sesión o crear una cuenta. El servidor valida las existencias y suma la selección al carrito de esa cuenta. Si hay cambios de disponibilidad, el cliente revisa el carrito antes de pagar.
 
 La pantalla de pago muestra una tarjeta ficticia y permite enviar la compra a revisión. Administración decide el resultado en **Solicitudes → Pagos simulados**. **Mis compras** muestra el estado de cada solicitud.
 

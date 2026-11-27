@@ -1,6 +1,9 @@
 'use strict';
 const $=s=>document.querySelector(s);
 const descriptions={cliente:'Consulta tus compras y encuentra todo en un solo lugar.',proveedor:'Un espacio para tu negocio y nuestra colaboración.',administrador:'Organiza la operación diaria de SoniClothes.'};
+const continuar=new URLSearchParams(location.search).get('continuar');
+const compra=continuar==='pago';
+const destinoCliente=new Map([['pago','/carrito.html?continuar=pago'],['compras','/cliente.html']]).get(continuar);
 let mode='login',role='cliente',busy=false;
 const form=$('#auth-form'),message=$('#message');
 function notice(text,error=false){message.textContent=text;message.classList.toggle('error',error);message.hidden=false;message.setAttribute('role',error?'alert':'status');}
@@ -14,6 +17,10 @@ function update(){
  $('#role-description').textContent=descriptions[role];
  $('#access-title').textContent=mode==='signup'?'Empieza a ser parte.':'Este es tu espacio.';
  $('#form-description').textContent=mode==='signup'?'Crea tu cuenta y conecta con SoniClothes.':'Elige cómo quieres entrar y continúa con tu cuenta.';
+ if(compra){
+  $('#access-title').textContent=mode==='signup'?'Crea tu cuenta para comprar':'Inicia sesión para comprar';
+  $('#form-description').textContent='Tu selección se guardó. Podrás continuar al pago con tu cuenta.';
+ }
  document.querySelectorAll('.signup-field').forEach(el=>{el.hidden=mode!=='signup';el.querySelectorAll('input').forEach(i=>{i.required=mode==='signup';i.disabled=mode!=='signup';});});
  $('#business-field').hidden=!(mode==='signup'&&role==='proveedor');$('#nombre-comercial').required=mode==='signup'&&role==='proveedor';$('#nombre-comercial').disabled=!$('#nombre-comercial').required;
  $('#login-options').hidden=mode!=='login';
@@ -32,7 +39,10 @@ function update(){
 }
 function rememberRole(){if(mode!=='login')return;const saved=stored('soni_usuario_'+role);$('#usuario').value=saved;$('#recordar').checked=!!saved;}
 function clearPassword(){ $('#contrasena').value='';$('#confirmacion').value='';$('#contrasena').type='password';$('.show-password').setAttribute('aria-label','Mostrar contraseña');$('.show-password').setAttribute('aria-pressed','false');}
-document.querySelectorAll('[data-role]').forEach(b=>b.addEventListener('click',()=>{if(busy)return;role=b.dataset.role;clearPassword();message.hidden=true;update();rememberRole();}));
+$('.role-switch').hidden=Boolean(destinoCliente);
+$('#role-description').hidden=Boolean(destinoCliente);
+$('#return-to-cart').hidden=!compra;
+document.querySelectorAll('[data-role]').forEach(b=>b.addEventListener('click',()=>{if(busy||destinoCliente)return;role=b.dataset.role;clearPassword();message.hidden=true;update();rememberRole();}));
 $('#mode-button').addEventListener('click',()=>{if(busy)return;mode=mode==='login'?'signup':'login';clearPassword();message.hidden=true;update();if(mode==='login')rememberRole();else $('#usuario').value='';$('#access-title').tabIndex=-1;$('#access-title').focus();});
 $('.show-password').addEventListener('click',()=>{const show=$('#contrasena').type==='password';$('#contrasena').type=show?'text':'password';$('.show-password').setAttribute('aria-label',show?'Ocultar contraseña':'Mostrar contraseña');$('.show-password').setAttribute('aria-pressed',String(show));});
 $('#help-button').addEventListener('click',()=>notice('Si olvidaste tu contraseña o tu solicitud sigue pendiente, solicita ayuda a la administración de SoniClothes.'));
@@ -50,7 +60,7 @@ form.addEventListener('submit',async e=>{
   if(data.destino){
    if(!['/tienda.html','/cliente.html','/proveedor.html','/ventas.html'].includes(data.destino))throw Error('Destino no válido.');
    try{if($('#recordar').checked&&mode==='login')localStorage.setItem('soni_usuario_'+role,payload.usuario);else localStorage.removeItem('soni_usuario_'+role);}catch{}
-   location.assign(data.destino);return;
+   location.assign(role==='cliente'&&destinoCliente ? destinoCliente : data.destino);return;
   }
   if(data.estado==='pendiente'){
    mode='login';clearPassword();update();notice('Solicitud enviada. La administración revisará tu acceso. Después de su aprobación podrás entrar con el usuario y la contraseña que elegiste.');

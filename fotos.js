@@ -31,11 +31,12 @@ function instalar(app, db, express) {
   app.get('/fotos/:proveedor/:producto', async (req, res, next) => {
     const { proveedor, producto } = req.params;
     if (![proveedor, producto].every(id => /^\d{1,18}$/.test(id))) return res.sendStatus(404);
-    if (req.usuario.rol === 'proveedor' && String(req.usuario.id_proveedor) !== proveedor) return res.sendStatus(404);
+    const rol = req.usuario?.rol;
+    if (rol === 'proveedor' && String(req.usuario.id_proveedor) !== proveedor) return res.sendStatus(404);
     try {
       const result = await db.exclusive(() => db.query(
         'SELECT contenido,mime FROM foto_prenda WHERE id_proveedor=$1 AND id_producto=$2 AND ($3 OR EXISTS(SELECT 1 FROM catalogo WHERE id_producto=$2))',
-        [proveedor, producto, req.usuario.rol !== 'cliente']
+        [proveedor, producto, rol === 'administrador' || rol === 'proveedor']
       ));
       const foto = result.rows[0];
       if (!foto) return res.sendStatus(404);
