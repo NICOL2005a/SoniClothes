@@ -30,6 +30,7 @@ async function verifyPassword(password, hash) {
     }
   }
 
+  
   const legacy = scryptFormat.exec(stored);
   if (legacy) {
     const [, salt, digest] = legacy;
