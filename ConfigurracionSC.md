@@ -64,7 +64,9 @@ Copia `.env.example` como `.env`, establece `DB_MODE=postgres` y configura las v
 
 `npm test` utiliza una base temporal. Comprueba registro inmediato de clientes, aprobación/rechazo, bloqueo de escalada a administrador, aislamiento de datos entre cuentas, sesiones, ventas y reversión de stock. La base original no participa.
 
-Las sesiones se guardan en memoria y se cierran al reiniciar el servidor. La recuperación automática de contraseña no está implementada: la pantalla indica que se contacte con la administración. Las contraseñas usan scrypt y sal aleatoria. Las cookies de sesión son HttpOnly y SameSite=Strict. El servidor valida rol, cuenta activa y propiedad de los datos.
+Las sesiones se guardan en memoria y se cierran al reiniciar el servidor. La recuperación automática de contraseña no está implementada: la pantalla indica que se contacte con la administración. Las cookies de sesión son HttpOnly y SameSite=Strict. El servidor valida rol, cuenta activa y propiedad de los datos.
+
+Las cuentas nuevas usan **Argon2id** con una sal aleatoria de 16 bytes, 19 MiB de memoria, dos iteraciones y paralelismo de 1. El formato PHC guarda el algoritmo, la versión, los parámetros, la sal y el hash en la misma columna `hash_contrasena`. Las cuentas que aún usan scrypt conservan su contraseña. Al iniciar sesión correctamente con el rol de una cuenta activa, el servidor genera el hash Argon2id y sustituye el anterior si sigue vigente. Si una solicitud de proveedor aprobada conserva una copia del mismo hash, se actualiza en la misma operación. `npm test` comprueba esta migración en una base temporal.
 
 El trabajo se entrega para uso y pruebas locales. Para Internet se necesita alojamiento de Node/PostgreSQL, HTTPS y configuración de origen. APP_ORIGIN fija el origen autorizado. TRUST_PROXY=1 solo se usa detrás de un proxy de confianza.
 

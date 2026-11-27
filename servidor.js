@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const db = require('./base');
 const {randomBytes} = require('node:crypto');
-const {roles,destinos,verifyPassword} = require('./acceso');
+const {roles,destinos,hashPassword,verifyPassword} = require('./acceso');
 const app = express();
 app.disable('x-powered-by');
 if(process.env.TRUST_PROXY === '1') app.set('trust proxy',1);
@@ -58,6 +58,28 @@ app.post('/api/login',async(req,res,next)=>{
   const field=usuario.includes('@')?'correo':'nombre_usuario';
   const u=await db.exclusive(async()=> (await db.query(`SELECT id_usuario,nombre,hash_contrasena,rol,activo FROM usuario WHERE ${field}=$1`,[usuario])).rows[0]);
   if(!await verifyPassword(b.contrasena,u?.hash_contrasena)||!u?.activo||u.rol!==b.rol)return invalid();
+  if (u.hash_contrasena.startsWith('scrypt:')) {
+   const hash = await hashPassword(b.contrasena);
+   const updated = await db.exclusive(() => db.query(
+    `WITH cuenta_actualizada AS (
+       UPDATE usuario SET hash_contrasena=$1
+       WHERE id_usuario=$2 AND hash_contrasena=$3 AND activo AND rol=$4
+       RETURNING id_usuario
+     ), solicitud_actualizada AS (
+       UPDATE solicitud_acceso SET hash_contrasena=$1
+       WHERE estado='aprobada' AND hash_contrasena=$3
+         AND id_usuario_creado IN (SELECT id_usuario FROM cuenta_actualizada)
+     )
+     SELECT id_usuario FROM cuenta_actualizada`,
+    [hash, u.id_usuario, u.hash_contrasena, u.rol]
+   ));
+   if (!updated.rows.length) {
+    const current = await db.exclusive(() => db.query(
+     'SELECT hash_contrasena FROM usuario WHERE id_usuario=$1 AND activo AND rol=$2', [u.id_usuario, u.rol]
+    ));
+    if (!await verifyPassword(b.contrasena, current.rows[0]?.hash_contrasena)) return invalid();
+   }
+  }
   intentos.delete(ip);
   const anterior=token(req);if(anterior)sesiones.delete(anterior);
   for(const [key,v]of sesiones)if(v.vence<=now)sesiones.delete(key);

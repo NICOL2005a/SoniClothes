@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "0.3.14",
+    "@node-rs/argon2": "2.2.2",
     "bootstrap": "5.3.3",
     "bootstrap-icons": "1.11.3",
     "dotenv": "16.4.5",
