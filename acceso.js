@@ -33,12 +33,10 @@ async function verifyPassword(password, hash) {
   const legacy = scryptFormat.exec(stored);
   if (legacy) {
     const [, salt, digest] = legacy;
-    // La implementación anterior pasaba la sal hexadecimal como texto a scrypt.
     const actual = await deriveScrypt(password, salt, 32);
     return timingSafeEqual(actual, Buffer.from(digest, 'hex'));
   }
 
-  // Una cuenta inexistente o sin un hash válido también requiere trabajo criptográfico.
   await hashPassword(password);
   return false;
 }
