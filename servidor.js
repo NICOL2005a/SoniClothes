@@ -121,10 +121,10 @@ app.use((req,res,next)=>{
  if(rol==='proveedor' && ((req.method==='GET'&&['/proveedores.html','/supplier.css'].includes(req.path)) ||
   (req.method==='POST'&&req.path==='/api/cuestionarios')))return next();
  const assets=['/portal.css','/portal.js','/app.css','/app-shell.js','/tienda.css','/tienda.js'];
- const api=rol==='cliente'?/^\/api\/portal\/cliente(?:\/ventas\/\d+|\/catalogo|\/carrito|\/pagos|\/checkout)?$/:/^\/api\/portal\/proveedor$/;
+ const api=rol==='cliente'?/^\/api\/portal\/cliente(?:\/ventas\/\d+|\/catalogo(?:\/word)?|\/carrito|\/pagos|\/checkout)?$/:/^\/api\/portal\/proveedor$/;
  const paginasCliente=['/tienda.html','/carrito.html','/pago.html'];
  if((req.method==='GET' && /^\/fotos\/\d+\/\d+$/.test(req.path))||(rol==='proveedor' && req.method==='PUT' && /^\/api\/portal\/proveedor\/foto\/\d+$/.test(req.path)))return next();
- if(req.path===portal||assets.includes(req.path)||(rol==='cliente'&&paginasCliente.includes(req.path))||api.test(req.path))return next();
+ if(req.path===portal||assets.includes(req.path)||(rol==='cliente'&&(paginasCliente.includes(req.path)||req.path==='/catalogo-prendas.js'))||api.test(req.path))return next();
  if(req.path.startsWith('/api/'))return res.status(403).json({error:'Tu cuenta no tiene acceso a esta sección.'});
  return res.redirect(destinos[rol]);
 });

@@ -76,6 +76,20 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  equal((await req('/api/registro',null,{...registration('corta','cliente'),contrasena:'123',confirmacion:'123'})).status,400);
  // Administración consulta el directorio y no registra ventas.
  const cat=(await req('/api/portal/cliente/catalogo',accounts.client)).data;
+ const catalogWord='/api/portal/cliente/catalogo/word';
+ const downloadWord=(query='',actor=accounts.client)=>fetch(base+catalogWord+query,{headers:actor?{Cookie:actor.cookie}:{}});
+ equal((await downloadWord('',null)).status,401);
+ equal((await downloadWord('',accounts.provider)).status,403);
+ equal((await downloadWord('',accounts.admin)).status,403);
+ equal((await downloadWord('?q=uno&q=dos')).status,400);
+ equal((await downloadWord('?q=sin-coincidencias-catalogo-word')).status,404);
+ const completeCatalog=await downloadWord();
+ equal(completeCatalog.status,200);
+ equal(completeCatalog.headers.get('content-type'),'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+ equal(completeCatalog.headers.get('content-disposition'),'attachment; filename="Catalogo-SoniClothes.docx"');
+ const catalogBytes=Buffer.from(await completeCatalog.arrayBuffer());
+ equal(catalogBytes.subarray(0,4).toString('hex'),'504b0304');
+ equal(catalogBytes.includes('word/document.xml'),true);
  const directory=await req('/api/directorio',accounts.admin);
  equal(directory.status,200);equal(directory.data.administradores.length,1);
  equal((await req('/api/directorio',accounts.client)).status,403);
@@ -170,6 +184,13 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  const displayed = await fetch(base + foto, {headers:{Cookie:accounts.client.cookie}});
  equal(displayed.headers.get('content-type'), 'image/png');
  equal(Buffer.from(await displayed.arrayBuffer()).equals(png), true);
+ const filter=new URLSearchParams({categoria:item.categoria,q:item.producto.toLocaleUpperCase('es')});
+ const filteredCatalog=await downloadWord('?'+filter);
+ equal(filteredCatalog.status,200);
+ const filteredBytes=Buffer.from(await filteredCatalog.arrayBuffer());
+ equal(filteredBytes.includes('word/media/'),true);
+ filter.set('categoria','Sin coincidencias');
+ equal((await downloadWord('?'+filter)).status,404);
 
  // Un proveedor vincula una propuesta a su propia cuenta. Solo Administración la publica.
  const propuesta={productos:[{nombre:'Prenda pendiente',categoria:'Playeras',precio_unitario:'200',existencias:'7',tallas:['M','L'],colores:['Oliva']}]};
@@ -179,10 +200,15 @@ const registration=(suffix,rol)=>({nombre:'Persona '+suffix,usuario:'cuenta.'+su
  const nueva=revision.find(p=>p.nombre==='Prenda pendiente');
  equal(nueva.estado,'pendiente');
  equal((await req('/api/portal/cliente/catalogo',accounts.client)).data.some(p=>p.id_producto===nueva.id_producto),false);
+ const proposedProduct='?'+new URLSearchParams({q:nueva.nombre});
+ equal((await downloadWord(proposedProduct)).status,404);
  equal((await req('/api/revision/'+nueva.id_producto,accounts.newProvider,{estado:'aprobada'})).status,403);
  equal((await req('/api/revision/'+nueva.id_producto,accounts.admin,{estado:'aprobada'})).status,200);
  const publicadas=(await req('/api/portal/cliente/catalogo',accounts.client)).data.filter(p=>p.id_producto===nueva.id_producto);
  equal(publicadas.length,2);equal(publicadas.reduce((sum,p)=>sum+Number(p.existencia),0),7);
+ const publishedCatalog=await downloadWord(proposedProduct);
+ equal(publishedCatalog.status,200);
+ await publishedCatalog.arrayBuffer();
  equal((await req('/api/registro',accounts.newAdmin,registration('admin-pendiente','administrador'))).status,403);
  const rejected=registration('rechazado','proveedor');equal((await req('/api/registro',null,rejected)).status,202);
  const denied=(await req('/api/solicitudes',accounts.admin)).data.find(x=>x.nombre_usuario===rejected.usuario);

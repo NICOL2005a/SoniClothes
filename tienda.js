@@ -1,3 +1,6 @@
+const { agruparPrendas } = require('./public/catalogo-prendas');
+const { crearCatalogoWord } = require('./catalogo-word');
+
 const fail=(message,status=400)=>Object.assign(Error(message),{status});
 const idValido=id=>/^\d+$/.test(String(id));
 async function cart(db,user){
@@ -6,11 +9,37 @@ async function cart(db,user){
  const pendiente=(await db.query("SELECT 1 FROM solicitud_pago WHERE id_usuario=$1 AND estado='pendiente'",[user])).rows.length>0;
  return {items,total:totalCentavos/100,unidades:items.reduce((s,p)=>s+p.cantidad,0),pendiente};
 }
-function instalar(app,db,ruta){
- ruta('get','/api/portal/cliente/catalogo',async(req,res)=>res.json((await db.query(`SELECT id_producto,id_variante,producto,marca,descripcion,precio_venta,categoria,talla,color,COALESCE(existencia,0) AS existencia,
+async function catalogo(db){
+ return (await db.query(`SELECT id_producto,id_variante,producto,marca,descripcion,precio_venta,categoria,talla,color,COALESCE(existencia,0) AS existencia,
  (SELECT string_agg(DISTINCT pr.nombre, ', ' ORDER BY pr.nombre) FROM proveedor_producto pp JOIN proveedor pr USING(id_proveedor) WHERE pp.id_producto=v.id_producto) AS proveedores,
  (SELECT '/fotos/'||f.id_proveedor||'/'||f.id_producto FROM foto_prenda f WHERE f.id_producto=v.id_producto ORDER BY f.id_proveedor LIMIT 1) AS foto
- FROM vista_catalogo_prendas v ORDER BY id_producto,id_variante`)).rows));
+ FROM vista_catalogo_prendas v ORDER BY id_producto,id_variante`)).rows;
+}
+function instalar(app,db,ruta){
+ ruta('get','/api/portal/cliente/catalogo',async(req,res)=>res.json(await catalogo(db)));
+ app.get('/api/portal/cliente/catalogo/word', async (req, res, next) => {
+  const { categoria = '', q = '' } = req.query;
+  if (typeof categoria !== 'string' || typeof q !== 'string') {
+   return res.status(400).json({ error: 'Revisa los filtros del catálogo.' });
+  }
+  try {
+   const { prendas, fotos } = await db.exclusive(async () => {
+    const prendas = agruparPrendas(await catalogo(db), { categoria, q });
+    if (!prendas.length) return { prendas, fotos: [] };
+    const ids = prendas.filter(([prenda]) => prenda.foto).map(([prenda]) => prenda.id_producto);
+    const fotos = ids.length ? (await db.query(
+     `SELECT DISTINCT ON (id_producto) id_producto, contenido, mime
+      FROM foto_prenda WHERE id_producto=ANY($1::bigint[])
+      ORDER BY id_producto, id_proveedor`, [ids]
+    )).rows : [];
+    return { prendas, fotos };
+   });
+   if (!prendas.length) return res.status(404).json({ error: 'No hay prendas que coincidan con estos filtros.' });
+
+   const archivo = await crearCatalogoWord(prendas, fotos);
+   res.attachment('Catalogo-SoniClothes.docx').send(archivo);
+  } catch (error) { next(error); }
+ });
  ruta('get','/api/portal/cliente/carrito',async(req,res)=>res.json(await cart(db,req.usuario.id_usuario)));
  ruta('post','/api/portal/cliente/carrito',async(req,res)=>{
   const {id_variante,cantidad}=req.body||{};
