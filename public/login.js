@@ -2,6 +2,8 @@
 const $=s=>document.querySelector(s);
 const descriptions={cliente:'Consulta tus compras y encuentra todo en un solo lugar.',proveedor:'Un espacio para tu negocio y nuestra colaboración.',administrador:'Organiza la operación diaria de SoniClothes.'};
 const continuar=new URLSearchParams(location.search).get('continuar');
+const modal=new URLSearchParams(location.search).get('modal')==='1';
+if(modal)document.body.classList.add('modal-mode');
 const compra=continuar==='pago';
 const destinoCliente=new Map([['pago','/carrito.html?continuar=pago'],['compras','/cliente.html']]).get(continuar);
 let mode='login',role='cliente',busy=false;
@@ -60,7 +62,9 @@ form.addEventListener('submit',async e=>{
   if(data.destino){
    if(!['/tienda.html','/cliente.html','/proveedor.html','/ventas.html'].includes(data.destino))throw Error('Destino no válido.');
    try{if($('#recordar').checked&&mode==='login')localStorage.setItem('soni_usuario_'+role,payload.usuario);else localStorage.removeItem('soni_usuario_'+role);}catch{}
-   location.assign(role==='cliente'&&destinoCliente ? destinoCliente : data.destino);return;
+   const destino=role==='cliente'&&destinoCliente ? destinoCliente : data.destino;
+   if(modal&&window.parent!==window){window.parent.postMessage({type:'soni-auth',destino},location.origin);return;}
+   location.assign(destino);return;
   }
   if(data.estado==='pendiente'){
    mode='login';clearPassword();update();notice('Solicitud enviada. La administración revisará tu acceso. Después de su aprobación podrás entrar con el usuario y la contraseña que elegiste.');

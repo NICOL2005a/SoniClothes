@@ -83,7 +83,7 @@ function transferGuestCart(){
   guestTransferPending=false;
  });
 }
-const colors={'Negro':'#42463f','Azul marino':'#424f5c','Blanco':'#eeeae0','Oliva':'#737a5b','Arena':'#d6c7a9'};
+const colors={'Negro':'#42463f','Azul marino':'#424f5c','Blanco':'#eeeae0','Oliva':'#737a5b','Arena':'#d6c7a9','Terracota':'#b65e45'};
 function garment(name,color='Oliva'){
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 240 270');svg.setAttribute('aria-hidden','true');
  const pants=/pantal|jean|chino/i.test(name),shirt=/camisa|oxford/i.test(name),hood=/sudadera|chamarra/i.test(name);
@@ -208,7 +208,7 @@ function renderPayment(){
  count();
  if(page==='tienda'){
   if(!guest)catalog=await api('catalogo');
-  $('hero-garment').append(garment('Camisa Oxford','Oliva'));
+  $('hero-garment').append(garment('Camisa Oxford','Terracota'));
   $('download-catalog').onclick=downloadCatalog;
   ['Todas',...new Set(catalog.map(v=>v.categoria))].forEach(category=>{const b=node('button',category);b.type='button';b.setAttribute('aria-pressed',String(category==='Todas'));b.onclick=()=>{selectedCategory=category;document.querySelectorAll('#categories button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));renderProducts();};$('categories').append(b);});$('search').oninput=renderProducts;renderProducts();
  }else if(page==='carrito'){
